@@ -15,6 +15,7 @@ model User {
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
   magicLinks    MagicLink[]
+  subscriptions Subscription[]
 
   @@map("users")
 }
@@ -31,4 +32,99 @@ model MagicLink {
   @@index([userId])
   @@index([expiresAt])
   @@map("magic_links")
+}
+
+model Feed {
+  id                   BigInt         @id @default(autoincrement())
+  publicId             String         @unique @default(uuid()) @map("public_id")
+  url                  String         @unique
+  title                String?
+  description          String?
+  siteUrl              String?        @map("site_url")
+  status               String         @default("HEALTHY")
+  initialSyncCompleted Boolean        @default(false) @map("initial_sync_completed")
+  lastSyncedAt         DateTime?      @map("last_synced_at")
+  lastError            String?        @map("last_error")
+  lastErrorAt          DateTime?      @map("last_error_at")
+  createdAt            DateTime       @default(now()) @map("created_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+  subscriptions        Subscription[]
+  articles             Article[]
+
+  @@index([status])
+  @@map("feeds")
+}
+
+model Article {
+  id            BigInt            @id @default(autoincrement())
+  publicId      String            @unique @default(uuid()) @map("public_id")
+  feedId        BigInt            @map("feed_id")
+  guid          String
+  title         String
+  link          String
+  description   String?
+  publishedAt   DateTime?         @map("published_at")
+  firstSeenAt   DateTime          @default(now()) @map("first_seen_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+  feed          Feed              @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  notifications NotificationLog[]
+
+  @@unique([feedId, guid])
+  @@index([feedId, firstSeenAt])
+  @@map("articles")
+}
+
+model Subscription {
+  id                   BigInt            @id @default(autoincrement())
+  publicId             String            @unique @default(uuid()) @map("public_id")
+  userId               BigInt            @map("user_id")
+  feedId               BigInt            @map("feed_id")
+  status               String            @default("ACTIVE")
+  unsubscribeTokenHash String            @unique @map("unsubscribe_token_hash")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+  user                 User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feed                 Feed              @relation(fields: [feedId], references: [id], onDelete: Cascade)
+  notifications        NotificationLog[]
+  statusHistory        SubscriptionStatusHistory[]
+
+  @@unique([userId, feedId])
+  @@index([userId])
+  @@index([feedId])
+  @@index([status])
+  @@map("subscriptions")
+}
+
+model SubscriptionStatusHistory {
+  id             BigInt       @id @default(autoincrement())
+  subscriptionId BigInt       @map("subscription_id")
+  status         String
+  createdAt      DateTime     @default(now()) @map("created_at")
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, createdAt])
+  @@map("subscription_status_history")
+}
+
+model NotificationLog {
+  id             BigInt       @id @default(autoincrement())
+  subscriptionId BigInt       @map("subscription_id")
+  articleId      BigInt       @map("article_id")
+  status         String       @default("PENDING")
+  retryCount     Int          @default(0) @map("retry_count")
+  errorMessage   String?      @map("error_message")
+  nextRetryAt    DateTime?    @map("next_retry_at")
+  failedAt       DateTime?    @map("failed_at")
+  sentAt         DateTime?    @map("sent_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  article        Article      @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, articleId])
+  @@index([status, nextRetryAt])
+  @@index([subscriptionId])
+  @@index([articleId])
+  @@map("notification_logs")
 }
