@@ -1,0 +1,24 @@
+檢查目前 Article / Subscription / Notification / Feed Sync / Scheduler 與 Prisma schema，直接實作 Article 清理排程。
+
+需求：
+- 每個 Feed 只保留最新的 N 篇 Article，預設為5篇。
+- N 必須透過既有 ConfigService 設定，若目前沒有相關設定，新增必要的環境變數與合理 default；不要新增 schema 欄位。
+- 以 `publishedAt` 判斷文章新舊；若 `publishedAt` 相同或為 null，使用現有可用欄位作穩定排序。
+- 只刪除超過保留數量的舊 Article。
+- 不得刪除仍被 Notification 或其他現有流程引用/需要的 Article；先檢查 Prisma relation 與實際使用方式。
+- 刪除必須在 DB 端執行，不要把所有 Article 載入 Node.js 記憶體後再處理。
+- 使用現有 NestJS Scheduler / Logger pattern，新增獨立 cleanup scheduler 或沿用現有 scheduler 結構，不建立第二套排程機制。
+- 排程週期沿用現有 scheduler 的設定模式；不要自行新增另一套 cron/config 機制。
+- 單一 Feed 清理失敗不得中斷其他 Feed 的清理。
+- 批次處理，避免一次刪除大量資料造成長交易。
+- 不影響現有 Feed Sync、Notification Dispatch 與 Subscription 行為。
+- 補上必要 unit tests，至少覆蓋：
+  1. 超過 N 篇時只刪除舊文章。
+  2. 未超過 N 篇時不刪除。
+  3. 不刪除仍被現有流程需要的 Article。
+  4. 某 Feed 清理失敗不影響其他 Feed。
+- 不新增 dependency、不修改 API、不修改無關 schema/code。
+- 完成後執行 Docker Backend 的 lint、相關 tests、build。
+- 用 Prisma ORM 方式實作
+
+直接檢查現有程式後實作，不要先建立新的 abstraction。完成後只回報修改檔案、實作內容、驗證結果與必要設定。
