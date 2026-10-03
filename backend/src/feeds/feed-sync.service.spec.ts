@@ -1,5 +1,8 @@
 import { PrismaService } from '../prisma/prisma.service';
-import { FeedFetcherService } from './feed-fetcher.service';
+import {
+  FeedFetcherService,
+  FeedResponseTooLargeException,
+} from './feed-fetcher.service';
 import { FeedSyncService } from './feed-sync.service';
 
 jest.mock('../prisma/prisma.service', () => ({
@@ -155,6 +158,41 @@ describe('FeedSyncService', () => {
       newArticles: 0,
       feedFailures: [],
       recoveredFeeds: [{ feedId: '2', durationMs: expect.any(Number) }],
+    });
+  });
+
+  it('將 response 超限分類並記錄後繼續同步其他 Feed', async () => {
+    feedFetcher.fetchAndParse.mockReset()
+      .mockRejectedValueOnce(new FeedResponseTooLargeException())
+      .mockResolvedValueOnce({
+        url: subscribedFeeds[1].url,
+        title: 'Healthy Feed',
+        description: null,
+        siteUrl: null,
+        items: [],
+      });
+
+    const summary = await service.syncSubscribedFeeds();
+
+    expect(summary).toEqual({
+      feeds: 2,
+      succeeded: 1,
+      failed: 1,
+      newArticles: 0,
+      feedFailures: [{
+        feedId: '1',
+        errorType: 'FeedResponseTooLargeException',
+        durationMs: expect.any(Number),
+      }],
+      recoveredFeeds: [],
+    });
+    expect(prisma.feed.update).toHaveBeenCalledWith({
+      where: { id: 1n },
+      data: {
+        status: 'ERROR',
+        lastError: 'Feed response is too large.',
+        lastErrorAt: expect.any(Date),
+      },
     });
   });
 });

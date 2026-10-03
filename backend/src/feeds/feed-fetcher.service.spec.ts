@@ -45,6 +45,42 @@ describe('FeedFetcherService', () => {
     );
   });
 
+  it('Content-Length 超過上限時立即 abort 並拒絕 response', async () => {
+    fetchSpy.mockResolvedValue(new Response('ignored', {
+      status: 200,
+      headers: { 'content-length': String(5 * 1024 * 1024 + 1) },
+    }));
+
+    await expect(service.fetchAndParse('http://8.8.8.8/feed.xml')).rejects.toThrow(
+      'Feed response is too large.',
+    );
+    expect(fetchSpy.mock.calls[0][1]?.signal?.aborted).toBe(true);
+  });
+
+  it('無 Content-Length 的超限串流會中止讀取並取消 stream', async () => {
+    const cancel = jest.fn();
+    let pullCount = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pullCount += 1;
+        if (pullCount === 1) {
+          controller.enqueue(new Uint8Array(5 * 1024 * 1024));
+        } else {
+          controller.enqueue(new Uint8Array([1]));
+        }
+      },
+      cancel,
+    });
+    fetchSpy.mockResolvedValue(new Response(body, { status: 200 }));
+
+    await expect(service.fetchAndParse('http://8.8.8.8/feed.xml')).rejects.toThrow(
+      'Feed response is too large.',
+    );
+    expect(fetchSpy.mock.calls[0][1]?.signal?.aborted).toBe(true);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(pullCount).toBeLessThan(4);
+  });
+
   it('每次 redirect 都重新檢查目的位址，拒絕導向內網', async () => {
     fetchSpy.mockResolvedValue(new Response(null, {
       status: 302,

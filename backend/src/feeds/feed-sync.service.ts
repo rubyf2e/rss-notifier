@@ -1,6 +1,9 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { FeedFetcherService } from './feed-fetcher.service';
+import {
+  FeedFetcherService,
+  FeedResponseTooLargeException,
+} from './feed-fetcher.service';
 
 export interface FeedSyncSummary {
   feeds: number;
@@ -12,6 +15,9 @@ export interface FeedSyncSummary {
 }
 
 function classifyError(error: unknown): string {
+  if (error instanceof FeedResponseTooLargeException) {
+    return 'FeedResponseTooLargeException';
+  }
   if (error instanceof BadRequestException) {
     return 'BadRequestException';
   }

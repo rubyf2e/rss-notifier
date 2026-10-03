@@ -6,6 +6,12 @@ import { assertPublicFeedUrl } from './feed-url.validator';
 const MAX_FEED_BYTES = 5 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 
+export class FeedResponseTooLargeException extends BadRequestException {
+  constructor() {
+    super('Feed response is too large.');
+  }
+}
+
 export interface ParsedFeedArticle {
   guid: string;
   title: string;
@@ -38,11 +44,15 @@ export class FeedFetcherService {
     for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
       await assertPublicFeedUrl(url);
 
+      const requestController = new AbortController();
       let response: Response;
       try {
         response = await fetch(url, {
           redirect: 'manual',
-          signal: AbortSignal.timeout(10_000),
+          signal: AbortSignal.any([
+            AbortSignal.timeout(10_000),
+            requestController.signal,
+          ]),
           headers: {
             accept: 'application/atom+xml, application/rss+xml, application/xml, text/xml, */*',
             'user-agent': 'rss-notifier/1.0',
@@ -72,17 +82,19 @@ export class FeedFetcherService {
 
       const contentLength = Number(response.headers.get('content-length') ?? 0);
       if (contentLength > MAX_FEED_BYTES) {
-        throw new BadRequestException('Feed response is too large.');
+        requestController.abort();
+        await response.body?.cancel().catch(() => undefined);
+        throw new FeedResponseTooLargeException();
       }
 
       let body: string;
       try {
-        body = await response.text();
-      } catch {
+        body = await this.readResponseBody(response, requestController);
+      } catch (error) {
+        if (error instanceof FeedResponseTooLargeException) {
+          throw error;
+        }
         throw new BadRequestException('Feed response could not be read.');
-      }
-      if (Buffer.byteLength(body) > MAX_FEED_BYTES) {
-        throw new BadRequestException('Feed response is too large.');
       }
 
       let parsedFeed: Awaited<ReturnType<Parser['parseString']>>;
@@ -130,5 +142,38 @@ export class FeedFetcherService {
     }
 
     throw new BadRequestException('Feed URL has an invalid or excessive redirect chain.');
+  }
+
+  private async readResponseBody(
+    response: Response,
+    requestController: AbortController,
+  ): Promise<string> {
+    const reader = response.body?.getReader();
+    if (!reader) {
+      return '';
+    }
+
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        totalBytes += value.byteLength;
+        if (totalBytes > MAX_FEED_BYTES) {
+          requestController.abort();
+          await reader.cancel().catch(() => undefined);
+          throw new FeedResponseTooLargeException();
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))).toString('utf8');
   }
 }
