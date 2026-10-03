@@ -1,0 +1,64 @@
+依 `.github/copilot-instructions.md` 執行。
+
+請依 **F1 → F2 → F3 → F4 → F5** 的順序逐步完成 Backend，不要一次大量重構。
+
+### 執行方式
+
+每次只處理一個 Feature：
+
+1. 先閱讀該 Feature 的 requirements 與目前相關實作。
+2. 只修改完成該 Feature 必要的 Backend 檔案。
+3. 補齊必要 tests。
+4. 執行該 Feature 相關驗證。
+5. 更新現有 Postman collection / import file，加入或更新該 Feature 實際存在的 API。
+6. 確認驗證通過後，再進入下一個 Feature。
+
+順序固定：
+
+- **F1：Passwordless Email Login**
+- **F2：Subscription Management**
+- **F3：Feed Sync / Feed Health**
+- **F4：Email Notification / Error Handling**
+- **F5：Unsubscribe**
+
+### Postman
+
+沿用目前專案既有的 Postman collection / import file。
+
+每完成一個 Feature 就立即更新：
+
+- 新增該 Feature 實際存在的 endpoint
+- 更新 request method / URL / headers / body
+- 更新必要的 authentication / JWT
+- 更新 response examples（若目前 collection 已使用）
+- 使用實際 API contract，不建立不存在的 endpoint
+- 不新增另一份 Postman collection
+- 不等 F1～F5 全部完成後才一次更新
+
+若目前沒有對應 Postman import file，先確認現有專案結構後再建立必要檔案。
+
+### 重要限制
+
+- 一次只處理一個 F。
+- 不提前實作後面的 F。
+- 不因下一個 Feature 而提前修改架構。
+- 不做與當前 Feature 無關的重構。
+- 不修改 Frontend。
+- 不新增 dependency。
+- 不修改 `package.json` / lockfile，除非該 Feature 明確需要 dependency 變更。
+- 不猜測不存在的 API、Queue、Processor 或 service。
+- 優先重用目前 infrastructure。
+- 不刪除或覆蓋既有 user changes。
+
+### 每個 Feature 完成後
+
+簡潔回報：
+
+1. Feature
+2. 修改檔案
+3. 實作內容
+4. Tests / validation 結果
+5. Postman 修改內容
+6. 尚未完成或需要注意的項目
+
+確認目前 Feature 完成且驗證通過後，再繼續下一個 Feature。

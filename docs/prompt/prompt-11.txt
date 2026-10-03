@@ -1,0 +1,85 @@
+依 `.github/copilot-instructions.md` 執行。
+
+**本次只分析 Backend，不修改任何檔案。Frontend 完全不處理。**
+
+先閱讀：
+
+- `docs/requirements.md`
+- `.github/copilot-instructions.md`
+- `README.md`
+
+再檢查目前 `backend/` 實際程式碼：
+
+- Modules / Controllers / Services
+- API endpoints
+- DTO / validation
+- Authentication / JWT
+- Prisma schema / migrations
+- Redis
+- BullMQ Queue / Processor
+- Scheduler
+- Mailer / email templates
+- Tests / e2e tests
+- Config / environment variables
+
+### 目標
+
+確認 F1～F5 在 **Backend** 的實際完成狀態，以及 Backend 尚缺哪些實作。
+
+以實際程式碼為準，不猜測不存在的 API、Queue、Processor 或 service。
+
+### 輸出
+
+1. **Backend 已存在 API**
+   - Method / Endpoint
+   - Request / Response
+   - Authentication
+   - 實作位置
+
+2. **F1～F5 Backend 狀態**
+
+   每項分：
+   - 已完成
+   - 部分完成
+   - 尚未完成
+
+   說明：
+   - 已有實作
+   - 缺少實作
+   - 對應檔案
+
+3. **Backend 尚缺項目**
+   - 缺少哪些功能
+   - 缺少哪些 API
+   - 缺少哪些 Queue / Processor / Scheduler / Service
+   - 缺少哪些 DB / Prisma 支援
+
+4. **建議修改檔案**
+   - 檔案路徑
+   - 修改目的
+   - 對應 F1～F5
+
+5. **驗證方式**
+   - 現有 tests
+   - 需要新增的 tests
+   - API / integration / e2e 驗證方式
+   - Docker 中應執行的測試與 build
+
+### 限制
+
+- 不修改任何檔案
+- 不新增檔案
+- 不新增 dependency
+- 不修改 Frontend
+- 不修改 `package.json` / lockfile
+- 不重構
+- 不建立 mock API
+- 不建立假資料
+- 不猜測不存在的 API / Queue / Processor
+- 不提出與 F1～F5 無關的改善
+
+最後只列出：
+
+**「下一步 Backend 實際需要修改的檔案清單」**
+
+本次只分析，不執行修改。

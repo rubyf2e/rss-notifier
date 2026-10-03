@@ -1,12 +1,12 @@
-# Magic Link Login + JWT + Queue + Redis + Scheduler（基本版）
+# RSS Notifier Backend
 
-這是以 Email Magic Link 登入為核心的 NestJS Backend 基本範例，串接 JWT、BullMQ/Redis 背景寄信，以及定期清理過期登入連結。此版本聚焦登入與背景工作基礎；RSS feed 管理、同步通知與 Frontend 應用頁面尚未實作。
+Backend 提供 Email Magic Link 登入、Feed 訂閱管理、定期 Feed 同步、新文章通知與取消訂閱確認頁。Feed 同步及寄信使用既有 NestJS Scheduler、BullMQ/Redis 與 Prisma/PostgreSQL。
 
 ## 技術組成
 
 - API 與登入：NestJS 12、TypeScript、Prisma 7、PostgreSQL 16、JWT。
 - 背景寄信：BullMQ、Redis 7、Nest Mailer、Nodemailer、Handlebars。
-- 定期工作：NestJS Scheduler 每日清理過期且未使用的 Magic Link。
+- 定期工作：清理過期 Magic Link，並依設定同步所有已訂閱 Feed。
 - 開發環境：Docker Compose 提供 Backend、PostgreSQL、Redis 與 Nuxt 4 Frontend dev server。
 
 ## 快速啟動
@@ -36,12 +36,12 @@ Backend API 預設為 `http://localhost:3000`，Frontend dev server 預設為 `h
 
 - PostgreSQL：`POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`POSTGRES_PORT`、`DATABASE_URL`。
 - Redis：`REDIS_PORT`、`REDIS_URL`。
-- Backend：`PORT`、`BACKEND_PORT`。
+- Backend：`PORT`、`BACKEND_PORT`、`BACKEND_URL`。`BACKEND_URL` 是通知信取消訂閱連結使用的公開 Backend origin；本機預設為 `http://localhost:3000`。
 - SMTP：`MAIL_HOST`、`MAIL_PORT`、`MAIL_SECURE`、`MAIL_USER`、`MAIL_PASS`、`MAIL_FROM`。
 - JWT：`JWT_SECRET`、`JWT_EXPIRES_IN`。
 - Magic Link：`MAGIC_LINK_TTL_MINUTES`、`FRONTEND_URL`。
 - Frontend dev server：`FRONTEND_PORT`、`NUXT_PUBLIC_API_BASE`。
-- `FEED_SYNC_INTERVAL_MINUTES`：範例保留的預留設定；此基本版尚無 Feed sync scheduler，設定不會觸發同步。
+- `FEED_SYNC_INTERVAL_MINUTES`：Feed 同步間隔（分鐘），預設 15；排程每分鐘檢查一次是否到期。未設定、非數字或非正數時使用 15。
 
 變數範例與預設值請以 [.env.example](.env.example) 為準。Compose 內 Backend 連線使用服務名稱 `postgres` 和 `redis`，不要將容器內連線 URL 改成 `localhost`。
 
@@ -96,13 +96,45 @@ GET /auth/magic-link/verify?token=<email-link-token>
 
 token 不存在、已過期或已使用時回傳 `401 Unauthorized`；token 為單次使用。資料庫使用 BigInt 作為內部 User ID，API 的 `user.id` 與 JWT `userId` 使用 User `publicId`。登入連結目前須由 Email 取得，再呼叫上述 API 完成驗證。
 
+### 訂閱管理
+
+除取消訂閱路由外，所有訂閱路由都需要 `Authorization: Bearer <accessToken>`。
+
+```http
+POST /subscriptions
+Content-Type: application/json
+
+{ "url": "https://example.com/feed.xml" }
+```
+
+新增時會即時抓取並解析 RSS/Atom；無效 Feed、無法連線或本機／內網目的地回傳 `400`，同一使用者重複訂閱回傳 `409`。成功回傳 `201`，包含訂閱 ID／狀態及 Feed 名稱、URL、健康狀態、最近同步時間與錯誤原因。
+
+```http
+GET /subscriptions
+PATCH /subscriptions/<subscription-id>/pause
+PATCH /subscriptions/<subscription-id>/resume
+DELETE /subscriptions/<subscription-id>
+```
+
+清單只包含目前 JWT 使用者的訂閱；跨使用者操作回傳 `404`。刪除成功回傳 `204`。
+
+### 取消訂閱
+
+通知信連結直接指向 Backend，不需 JWT；成功取消後回傳 HTML 確認頁。無效或遭竄改的 token 回傳 `400`，不會修改訂閱。
+
+```http
+GET /subscriptions/unsubscribe?token=<email-unsubscribe-token>
+```
+
 ## Postman
 
-匯入 [API Postman collection](postman/rss-notifier-api.postman_collection.json)。Collection 包含目前所有 Backend routes 及輸入錯誤案例。使用前設定 `baseUrl` 與 `email`；成功驗證案例需先從登入信取得 token，填入 `magicLinkToken`。
+匯入 [API Postman collection](postman/rss-notifier-api.postman_collection.json)。Collection 包含目前 Backend routes 與輸入錯誤案例。使用前設定 `baseUrl` 與 `email`；成功驗證案例需先從登入信取得 token，填入 `magicLinkToken`。訂閱路由使用驗證後自動儲存的 `accessToken`；取消訂閱案例需填入通知信中的 `unsubscribeToken`。
 
 ## Background 工作與記錄
 
 - Mail queue：`mail`。Magic Link request enqueue 收件者與登入 URL；Worker 負責套用 Handlebars template 並呼叫 MailerService。
+- Feed sync：每次到期同步已訂閱 Feed；訂閱時保存文章基準，後續透過 `(feedId, guid)` 去重。單一 Feed 失敗會記錄錯誤並繼續處理其他 Feed。
+- Article notification：以 `NotificationLog` 作為持久待辦紀錄，使用同一個 `mail` queue 寄送；BullMQ 指數退避最多 5 次，最終失敗寫入 `FAILED` 與錯誤原因。
 - Redis：提供 BullMQ queue backend，不作為主要業務資料庫。
 - Magic Link cleanup：每日午夜以批次方式刪除 `usedAt IS NULL` 且 `expiresAt < now` 的資料。
 - Scheduler log：`/app/logs/backend-scheduler.jsonl`，JSON Lines 格式，記錄排程名稱、開始/結束時間、成功/失敗、耗時及必要的錯誤資訊。Docker named volume `backend_scheduler_logs` 會跨 container recreate 持久保存。

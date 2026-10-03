@@ -6,6 +6,7 @@ import { PersistentSchedulerLogger } from '../scheduler/persistent-scheduler-log
 import { MagicLinkCleanupScheduler } from './magic-link-cleanup.scheduler';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { AuthService } from './auth.service';
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, MagicLinkCleanupScheduler, PersistentSchedulerLogger],
+  providers: [AuthService, JwtAuthGuard, MagicLinkCleanupScheduler, PersistentSchedulerLogger],
+  exports: [JwtAuthGuard, JwtModule],
 })
 export class AuthModule {}
