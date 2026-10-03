@@ -1,250 +1,152 @@
 import type {
-  FeedResponse,
+  MagicLinkSessionResponse,
   PaginatedSubscriptionsResponse,
   SubscriptionResponse,
-  SubscriptionStatus,
-  UnsubscribePreview,
 } from "~/types/notifier";
 
-const DEMO_UNSUBSCRIBE_TOKEN = "demo-unsubscribe-token";
-const DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID = "sub-demo-verge";
-const DEFAULT_PAGE = 1;
-const DEFAULT_LIMIT = 20;
-
-type SubscriptionRecord = SubscriptionResponse & {
-  publicId?: string;
+type RequestOptions = {
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  body?: Record<string, string>;
+  query?: Record<string, string | number>;
 };
 
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
-function createPublicId(prefix: string) {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function serializeSubscription(
-  record: SubscriptionRecord,
-): SubscriptionResponse {
-  return {
-    id: record.id,
-    status: record.status,
-    createdAt: record.createdAt,
-    feed: {
-      title: record.feed.title,
-      url: record.feed.url,
-      status: record.feed.status,
-      lastSyncedAt: record.feed.lastSyncedAt,
-      lastError: record.feed.lastError,
-    },
+function getErrorStatus(error: unknown) {
+  if (typeof error !== "object" || error === null) return undefined;
+  const fetchError = error as {
+    status?: number;
+    statusCode?: number;
+    response?: { status?: number };
   };
-}
-
-function createSeedSubscriptions(): SubscriptionRecord[] {
-  const now = Date.now();
-  const names = [
-    "The Verge",
-    "NPR News",
-    "Ars Technica",
-    "Hacker News",
-    "Smashing Magazine",
-    "Product Hunt",
-    "Engadget",
-    "The Verge Tech",
-    "MIT Technology Review",
-    "GitHub Blog",
-    "TechCrunch",
-    "The New Stack",
-    "Reddit r/technology",
-    "Mozilla Hacks",
-    "VS Code Blog",
-    "Docker Blog",
-    "NestJS News",
-    "Vue School",
-    "OpenAI Blog",
-    "AWS News",
-    "Google Developer Blog",
-    "Microsoft Dev Blog",
-    "Apple Newsroom",
-    "Kubernetes Blog",
-    "Vercel Blog",
-    "Cloudflare Blog",
-    "Linus Tech Tips",
-  ];
-
-  return Array.from({ length: 27 }, (_, index) => {
-    const subscriptionId =
-      index === 0 ? DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID : `sub-demo-${index}`;
-    const feedTitle = names[index % names.length];
-    const isActive = index % 4 !== 0;
-    const isError = index % 5 === 0;
-    const createdAt = new Date(now - index * 3 * 60 * 60_000).toISOString();
-    const lastSyncedAt = new Date(now - index * 28 * 60_000).toISOString();
-
-    return {
-      id: subscriptionId,
-      publicId: subscriptionId,
-      status: isActive ? "ACTIVE" : "PAUSED",
-      createdAt,
-      feed: {
-        title: feedTitle,
-        url: `https://example.com/feed/${index + 1}.xml`,
-        status: isError ? "ERROR" : "HEALTHY",
-        lastSyncedAt,
-        lastError: isError ? "連線逾時，最近一次檢查未能取得 Feed。" : null,
-      },
-    };
-  });
-}
-
-function waitForMockResponse() {
-  return new Promise<void>((resolve) => setTimeout(resolve, 280));
+  return (
+    fetchError.statusCode ?? fetchError.status ?? fetchError.response?.status
+  );
 }
 
 export function useNotifierApi() {
-  const subscriptions = useState<SubscriptionRecord[]>(
-    "mock-subscriptions",
-    createSeedSubscriptions,
-  );
-
-  async function requestMagicLink(email: string) {
-    await waitForMockResponse();
-    if (!/^\S+@\S+\.\S+$/.test(email)) {
-      throw new Error("請輸入有效的 Email 地址。");
-    }
-
-    return { message: "示範模式：登入連結申請已完成。" };
-  }
-
-  async function listSubscriptions(
-    params: { page?: number; limit?: number } = {},
-  ): Promise<PaginatedSubscriptionsResponse> {
-    await waitForMockResponse();
-
-    const page = Math.max(1, Number(params.page) || DEFAULT_PAGE);
-    const limit = Math.max(1, Number(params.limit) || DEFAULT_LIMIT);
-    const total = subscriptions.value.length;
-    const totalPages = Math.max(1, Math.ceil(total / limit));
-    const safePage = Math.min(page, totalPages);
-    const start = (safePage - 1) * limit;
-    const sliced = subscriptions.value.slice(start, start + limit);
-
-    return {
-      items: sliced.map((item) => serializeSubscription(item)),
-      page: safePage,
-      limit,
-      total,
-      totalPages,
-    };
-  }
-
-  async function createSubscription(
-    url: string,
-  ): Promise<SubscriptionResponse> {
-    await waitForMockResponse();
-
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(url);
-    } catch {
-      throw new Error("請輸入有效的 Feed 網址。");
-    }
-
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-      throw new Error("Feed 網址必須使用 HTTP 或 HTTPS。");
-    }
-
-    const normalizedUrl = parsedUrl.toString();
-    if (subscriptions.value.some((item) => item.feed.url === normalizedUrl)) {
-      throw new Error("這個 Feed 已經在訂閱清單中。");
-    }
-
-    const title = parsedUrl.hostname.replace(/^www\./, "").split(".")[0];
-    const createdAt = new Date().toISOString();
-    const subscriptionId = createPublicId("sub");
-    const subscription: SubscriptionRecord = {
-      id: subscriptionId,
-      publicId: subscriptionId,
-      status: "ACTIVE",
-      createdAt,
-      feed: {
-        title: title.charAt(0).toUpperCase() + title.slice(1),
-        url: normalizedUrl,
-        status: "HEALTHY",
-        lastSyncedAt: createdAt,
-        lastError: null,
-      },
-    };
-
-    subscriptions.value = [subscription, ...subscriptions.value];
-    return serializeSubscription(subscription);
-  }
-
-  async function updateSubscriptionStatus(
-    subscriptionId: string,
-    status: SubscriptionStatus,
+  const config = useRuntimeConfig();
+  const router = useRouter();
+  const auth = useNotifierAuth();
+  const configuredBase = String(config.public.apiBase).replace(/\/+$/, "");
+  const serverBase = import.meta.server
+    ? new URL(configuredBase || "http://backend:3000")
+    : null;
+  if (
+    serverBase &&
+    (serverBase.hostname === "localhost" || serverBase.hostname === "127.0.0.1")
   ) {
-    await waitForMockResponse();
-    const subscription = subscriptions.value.find(
-      (item) => item.id === subscriptionId || item.publicId === subscriptionId,
-    );
-    if (!subscription) {
-      throw new Error("找不到這筆訂閱，請重新整理後再試。");
+    serverBase.hostname = "backend";
+  }
+  const serverPath = serverBase?.pathname.replace(/\/+$/, "") ?? "";
+  const baseURL = import.meta.server
+    ? `${serverBase?.origin}${serverPath.endsWith("/api") ? serverPath : `${serverPath}/api`}`
+    : "/api/backend";
+
+  async function request<T>(
+    path: string,
+    options: RequestOptions = {},
+    requiresAuth = false,
+  ): Promise<T> {
+    const headers: Record<string, string> = {};
+    if (requiresAuth && auth.session.value?.accessToken) {
+      headers.Authorization = `Bearer ${auth.session.value.accessToken}`;
     }
 
-    subscription.status = status;
-    return serializeSubscription(subscription);
+    try {
+      return await $fetch<T>(path, { baseURL, ...options, headers });
+    } catch (error) {
+      const status = getErrorStatus(error);
+      if (requiresAuth && (status === 401 || status === 403)) {
+        const wasValidated = auth.validation.value === "valid";
+        auth.clearSession();
+        if (wasValidated && router.currentRoute.value.path !== "/login") {
+          await navigateTo("/login", { replace: true });
+        }
+      }
+      throw error;
+    }
   }
 
-  async function deleteSubscription(subscriptionId: string) {
-    await waitForMockResponse();
-    const nextSubscriptions = subscriptions.value.filter(
-      (item) => item.id !== subscriptionId && item.publicId !== subscriptionId,
-    );
-    if (nextSubscriptions.length === subscriptions.value.length) {
-      throw new Error("找不到這筆訂閱，請重新整理後再試。");
+  function getErrorMessage(error: unknown, fallback: string): string {
+    if (typeof error === "object" && error !== null && "data" in error) {
+      const data = error.data;
+      if (typeof data === "object" && data !== null && "message" in data) {
+        const message = data.message;
+        if (typeof message === "string") return message;
+        if (
+          Array.isArray(message) &&
+          message.every((item) => typeof item === "string")
+        ) {
+          return message.join("\n");
+        }
+      }
     }
-
-    subscriptions.value = nextSubscriptions;
+    if (error instanceof Error && error.message) return error.message;
+    return fallback;
   }
 
-  async function getUnsubscribePreview(
-    token: string,
-  ): Promise<UnsubscribePreview> {
-    await waitForMockResponse();
-    if (token !== DEMO_UNSUBSCRIBE_TOKEN) {
-      throw new Error("取消訂閱連結無效或已失效。");
-    }
-
-    const subscription = subscriptions.value.find(
-      (item) =>
-        item.id === DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID ||
-        item.publicId === DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID,
-    );
-    if (!subscription) {
-      throw new Error("這筆訂閱已不存在或已取消。");
-    }
-
-    return { feedName: subscription.feed.title };
+  function requestMagicLink(email: string) {
+    return request<{ message: string }>("/auth/magic-link", {
+      method: "POST",
+      body: { email },
+    });
   }
 
-  async function unsubscribe(token: string) {
-    const preview = await getUnsubscribePreview(token);
-    subscriptions.value = subscriptions.value.filter(
-      (item) =>
-        item.id !== DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID &&
-        item.publicId !== DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID,
+  function verifyMagicLink(token: string) {
+    return request<MagicLinkSessionResponse>("/auth/magic-link/verify", {
+      query: { token },
+    });
+  }
+
+  function listSubscriptions(params: { page?: number; limit?: number } = {}) {
+    return request<PaginatedSubscriptionsResponse>(
+      "/subscriptions",
+      { query: { page: params.page ?? 1, limit: params.limit ?? 10 } },
+      true,
     );
-    return preview;
+  }
+
+  function createSubscription(url: string) {
+    return request<SubscriptionResponse>(
+      "/subscriptions",
+      { method: "POST", body: { url } },
+      true,
+    );
+  }
+
+  function updateSubscriptionStatus(
+    subscriptionId: string,
+    status: "ACTIVE" | "PAUSED",
+  ) {
+    const action = status === "PAUSED" ? "pause" : "resume";
+    return request<SubscriptionResponse>(
+      `/subscriptions/${encodeURIComponent(subscriptionId)}/${action}`,
+      { method: "PATCH" },
+      true,
+    );
+  }
+
+  function deleteSubscription(subscriptionId: string) {
+    return request<void>(
+      `/subscriptions/${encodeURIComponent(subscriptionId)}`,
+      { method: "DELETE" },
+      true,
+    );
+  }
+
+  function unsubscribe(token: string) {
+    return request<string>("/subscriptions/unsubscribe", {
+      query: { token },
+    });
   }
 
   return {
     requestMagicLink,
+    verifyMagicLink,
     listSubscriptions,
     createSubscription,
     updateSubscriptionStatus,
     deleteSubscription,
-    getUnsubscribePreview,
     unsubscribe,
+    getErrorMessage,
   };
 }

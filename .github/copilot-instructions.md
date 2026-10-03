@@ -96,6 +96,8 @@ Frontend 已使用：
 - 不猜測 endpoint、method、payload、response。
 - API contract 變更時同步更新必要的 frontend/types/tests。
 - Frontend API base URL 使用 `NUXT_PUBLIC_API_BASE`，不得硬編碼。
+- Frontend 正式資料來源為 Backend API；contract 以 Postman collection 與 Backend 實際實作為準。
+- Frontend API error 顯示 Backend response 的 `message`（包含 string array）；不得依 HTTP status 自行 mapping 或改寫錯誤訊息。HTTP status 可用於控制流程，例如清除失效 session 並導向登入。
 
 ## Frontend
 
@@ -105,7 +107,8 @@ Frontend 已使用：
 - Layout、spacing、responsive、簡單 utility 優先使用 Tailwind CSS。
 - Global styles、design tokens、Element Plus overrides、複雜/共用樣式使用 SCSS。
 - 保持 SSR/client 邊界；browser API 只能在 client context 使用。
-- 不把 mock 行為視為正式 API contract。
+- 不建立或保留 `useMockApi` 等只服務 mock 的 abstraction；不把 mock 行為視為正式 API contract。
+- `localStorage` / cookie 中的 session 只能作為 restore/cache，不可單獨視為已登入；protected page 初始化需呼叫正式 Backend API 驗證，並清除失效 session 與同步 reactive auth state。
 
 ## Styling
 

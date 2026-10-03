@@ -1,14 +1,14 @@
 <script setup lang="ts">
-const { session, endDemoSession } = useDemoAuth();
+const { session, validation, clearSession } = useNotifierAuth();
 
 async function signOut() {
-  endDemoSession();
-  await navigateTo("/login");
+  clearSession();
+  await navigateTo("/login", { replace: true });
 }
 </script>
 
 <template>
-  <div class="app-shell">
+  <div v-if="validation === 'valid'" class="app-shell">
     <header class="app-header">
       <div class="flex items-center gap-7">
         <NuxtLink
@@ -24,10 +24,16 @@ async function signOut() {
         </nav>
       </div>
       <div class="app-header-account">
-        <span class="account-email">{{ session?.email }}</span>
+        <span class="account-email">{{ session?.user.email }}</span>
         <el-button text @click="signOut">登出</el-button>
       </div>
     </header>
     <slot />
   </div>
+  <main
+    v-else
+    class="grid min-h-screen place-items-center text-sm text-gray-500"
+  >
+    正在驗證登入狀態…
+  </main>
 </template>

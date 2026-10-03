@@ -1,0 +1,202 @@
+依 `copilot-instructions.md` 執行。
+
+本次將目前 Frontend 從 mock API / mock auth 整合為正式 Backend API。
+
+主要參考：
+
+- `postman/rss-notifier-api.postman_collection.json`
+- `backend/`
+- `frontend/`
+
+**只修改 Frontend 與 `copilot-instructions.md`，不要修改 Backend。**
+
+### 先檢查
+
+先完整搜尋 Frontend：
+
+- `useMockApi`
+- mock API / mock data
+- mock auth / fake login state
+- localStorage auth/session/user
+- API composables
+- API types
+- pages / components
+- route middleware / auth guard
+- 401 / 403 handling
+- subscription API
+- unsubscribe API
+- magic-link flow
+- loading / error handling
+
+再對照 Postman 與 Backend 的實際 API contract。
+
+不要直接假設現有 mock API 的 request / response 與正式 API 相同。
+
+### API 整合
+
+將目前 Frontend mock API 改為正式 Backend API：
+
+- API base URL 使用既有 `NUXT_PUBLIC_API_BASE`
+- 沿用現有 API composable / abstraction
+- 不新增第二套 API client
+- request method / path / query / body 依 Postman + Backend 實際 contract
+- response mapping 依正式 Backend response
+- 移除只為 mock 存在的 API 行為與資料
+- 不修改 Backend API contract
+
+如果目前有：
+
+- `useMockApi`
+- `MockApi`
+- `mockApi`
+- `mock`
+- `fakeApi`
+- `fakeAuth`
+
+等只服務於 mock 的命名，正式整合後一併移除或改成符合正式用途的命名。
+
+不只改檔名；同步更新所有 imports / references / types。
+
+### Auth / Stale Session
+
+特別處理 Frontend **stale auth session**。
+
+`localStorage` 不得再被視為可信的登入狀態來源，只能作為 session restore/cache。
+
+重新整理受保護頁面時：
+
+1. restore localStorage
+2. 使用正式 Backend API 驗證目前 session / user 是否仍有效
+3. Backend 判定不存在、未授權或 session 無效：
+   - 清除 stale auth/session/user
+   - 更新 reactive auth state
+   - 導向 login
+4. 不得因 localStorage 舊資料繼續顯示受保護頁面
+5. 避免：
+   - redirect loop
+   - 重複 session validation
+   - auth state 與 localStorage 不同步
+   - 驗證尚未完成就錯誤渲染受保護內容
+
+優先使用目前 Backend 已存在且 Postman 有定義的 API。
+
+**不要因 stale session 問題修改 Backend 或新增 Backend endpoint。**
+
+如果現有 API 無法完整驗證 session，依目前 contract 做最小可行整合，並在完成報告指出限制。
+
+### API Error Handling
+
+Frontend **不得自行定義 API 錯誤訊息**。
+
+所有 Backend API error：
+
+- 優先使用 Backend response 的 `message`
+- Frontend 只負責取得、保存、顯示
+- 不把 HTTP status 自行轉成另一段使用者訊息
+- 不建立例如：
+  - `if (status === 401) error = '登入已過期'`
+  - `if (status === 404) error = '找不到資料'`
+  - `errorMessages = {...}`
+  之類的 Frontend API error mapping
+
+可以根據 HTTP status 做**控制流程**，例如：
+
+- 401 → 清除 auth + redirect login
+
+但顯示給使用者的 API error message 必須使用 Backend `message`。
+
+若 Backend error response 的 `message` 可能是 string 或 string array，依目前 Backend 實際 contract 正確處理，不自行改寫內容。
+
+Network error / request 根本沒有取得 Backend response 的情況，沿用目前 Frontend 的既有 generic handling；不要冒充 Backend message。
+
+### 功能整合
+
+依正式 API 整合目前已有功能：
+
+- Magic link login
+- session/auth state
+- logout
+- subscription list
+- server-side pagination
+- add subscription
+- pause / resume
+- delete
+- feed status / last sync / latest error
+- unsubscribe
+
+Subscription list 必須使用正式 API 的：
+
+```text
+items
+page
+limit
+total
+totalPages
+```
+
+不要恢復成 Frontend local mock pagination。
+
+### 移除 Mock
+
+正式 API 整合完成後：
+
+- 移除不再使用的 mock API code
+- 移除 mock-only data
+- 移除 mock-only types
+- 移除 mock-only imports
+- 移除 mock-only naming
+- 不保留 dead code
+- 不保留「正式 API / mock API 二選一」的舊流程，除非目前專案已有明確正式需求
+
+但不要刪除仍被正式功能使用的共用 abstraction。
+
+### `copilot-instructions.md`
+
+同步更新 `copilot-instructions.md`，反映目前 Frontend 已正式使用 Backend API。
+
+至少調整：
+
+- Frontend API 不再以 mock API 為正式資料來源
+- `useMockApi` 等 mock-only abstraction 不應存在
+- API contract 以 Postman + Backend 實際 contract 為準
+- API error message 必須使用 Backend 回傳的 `message`
+- Frontend 不自行定義 / mapping Backend API error messages
+- HTTP status 可以用於控制流程，但不得取代 Backend `message`
+- `localStorage` 不可單獨作為 authenticated state 的可信來源
+- protected page/session initialization 必須考慮 stale auth session
+- Frontend 使用 `NUXT_PUBLIC_API_BASE`
+
+保留原有規則，不要整份重寫。
+
+### Constraints
+
+- 不修改 Backend。
+- 不修改 Prisma / schema。
+- 不修改 Postman collection。
+- 不新增 package。
+- 不新增 mock server。
+- 不順便重構無關 Frontend。
+- 不修改 UI，除非正式 API 整合需要調整 loading/error state。
+- 不使用 `<style>` / `<style scoped>`。
+- 沿用現有 Element Plus / Tailwind / SCSS 架構。
+
+### Validation
+
+先執行與 API/auth/subscription 相關的 Frontend checks，再：
+
+```bash
+docker compose exec frontend npm run build
+```
+
+如果現有 Frontend 沒有 test script，不要自行新增。
+
+完成後只回報：
+
+1. 修改檔案
+2. 移除 / 更名哪些 mock API / auth 命名
+3. 正式 API 整合內容
+4. stale auth session 的處理方式
+5. API error `message` 的處理方式
+6. `copilot-instructions.md` 調整內容
+7. Build / tests 結果
+8. 尚未能由現有 Backend contract 支援的項目

@@ -1,52 +1,34 @@
 <script setup lang="ts">
-import type { UnsubscribePreview } from "~/types/notifier";
-
 definePageMeta({ layout: false });
 
 const route = useRoute();
 const api = useNotifierApi();
-const { session } = useDemoAuth();
-const viewState = ref<"loading" | "ready" | "working" | "success" | "error">(
-  "loading",
-);
-const preview = ref<UnsubscribePreview | null>(null);
+const auth = useNotifierAuth();
+const viewState = ref<"ready" | "working" | "success" | "error">("ready");
 const errorMessage = ref("");
 
 const token = computed(() =>
   typeof route.query.token === "string" ? route.query.token : "",
 );
 
-async function loadPreview() {
-  viewState.value = "loading";
-  errorMessage.value = "";
-  try {
-    preview.value = await api.getUnsubscribePreview(token.value);
-    viewState.value = "ready";
-  } catch (error) {
-    errorMessage.value =
-      error instanceof Error ? error.message : "取消訂閱連結無效。";
-    viewState.value = "error";
-  }
-}
-
 async function confirmUnsubscribe() {
   viewState.value = "working";
   errorMessage.value = "";
   try {
-    preview.value = await api.unsubscribe(token.value);
+    await api.unsubscribe(token.value);
     viewState.value = "success";
   } catch (error) {
-    errorMessage.value =
-      error instanceof Error ? error.message : "取消訂閱失敗，請稍後再試。";
+    errorMessage.value = api.getErrorMessage(
+      error,
+      "取消訂閱失敗，請稍後再試。",
+    );
     viewState.value = "error";
   }
 }
 
 async function returnToApp() {
-  await navigateTo(session.value ? "/subscriptions" : "/login");
+  await navigateTo(auth.session.value ? "/subscriptions" : "/login");
 }
-
-onMounted(loadPreview);
 </script>
 
 <template>
@@ -57,14 +39,9 @@ onMounted(loadPreview);
         <span>RSS NOTIFIER</span>
       </NuxtLink>
 
-      <template v-if="viewState === 'loading'">
-        <h1>確認取消訂閱</h1>
-        <p>正在驗證連結…</p>
-        <el-skeleton :rows="2" animated />
-      </template>
-      <template v-else-if="viewState === 'ready'">
+      <template v-if="viewState === 'ready'">
         <p class="section-kicker">EMAIL PREFERENCES</p>
-        <h1>取消 {{ preview?.feedName }} 通知？</h1>
+        <h1>取消此 Feed 的通知？</h1>
         <p>確認後，這個 Feed 的新文章通知將停止寄送。</p>
         <el-button
           type="primary"
@@ -82,13 +59,7 @@ onMounted(loadPreview);
       <template v-else-if="viewState === 'success'">
         <p class="section-kicker">已完成</p>
         <h1>已取消訂閱</h1>
-        <p>{{ preview?.feedName }} 的通知已停止。</p>
-        <el-alert
-          title="此示範只更新本機 mock 資料。"
-          type="success"
-          :closable="false"
-          show-icon
-        />
+        <p>此 Feed 的通知已停止。</p>
         <el-button class="mt-5" @click="returnToApp">完成</el-button>
       </template>
       <template v-else>

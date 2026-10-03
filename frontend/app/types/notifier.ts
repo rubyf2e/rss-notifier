@@ -24,10 +24,10 @@ export interface PaginatedSubscriptionsResponse {
   totalPages: number;
 }
 
-export interface DemoSession {
-  email: string;
-}
-
-export interface UnsubscribePreview {
-  feedName: string;
+export interface MagicLinkSessionResponse {
+  accessToken: string;
+  user: {
+    id: string;
+    email: string;
+  };
 }

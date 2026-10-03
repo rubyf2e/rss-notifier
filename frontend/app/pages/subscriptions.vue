@@ -16,6 +16,7 @@ definePageMeta({
 });
 
 const api = useNotifierApi();
+const auth = useNotifierAuth();
 const subscriptions = ref<SubscriptionResponse[]>([]);
 const isInitialLoading = ref(true);
 const isPageLoading = ref(false);
@@ -27,7 +28,7 @@ const addForm = ref<FormInstance>();
 const busySubscriptionId = ref<string | null>(null);
 const pagination = reactive({
   page: 1,
-  limit: 20,
+  limit: 10,
   total: 0,
   totalPages: 1,
 });
@@ -77,8 +78,7 @@ async function loadSubscriptions(
 
     applyPageResponse(response);
   } catch (error) {
-    listError.value =
-      error instanceof Error ? error.message : "訂閱清單載入失敗。";
+    listError.value = api.getErrorMessage(error, "訂閱清單載入失敗。");
   } finally {
     isInitialLoading.value = false;
     isPageLoading.value = false;
@@ -116,8 +116,7 @@ async function addFeed() {
     await loadSubscriptions(pagination.page, pagination.limit);
     ElMessage.success("Feed 已加入訂閱清單。");
   } catch (error) {
-    addError.value =
-      error instanceof Error ? error.message : "新增 Feed 失敗，請稍後再試。";
+    addError.value = api.getErrorMessage(error, "新增 Feed 失敗，請稍後再試。");
   } finally {
     isAdding.value = false;
   }
@@ -133,9 +132,7 @@ async function toggleSubscription(subscription: SubscriptionResponse) {
       nextStatus === "PAUSED" ? "已暫停此訂閱。" : "已恢復此訂閱。",
     );
   } catch (error) {
-    ElMessage.error(
-      error instanceof Error ? error.message : "更新訂閱狀態失敗。",
-    );
+    ElMessage.error(api.getErrorMessage(error, "更新訂閱狀態失敗。"));
   } finally {
     busySubscriptionId.value = null;
   }
@@ -163,7 +160,7 @@ async function removeSubscription(subscription: SubscriptionResponse) {
     await loadSubscriptions(pagination.page, pagination.limit);
     ElMessage.success("訂閱已刪除。");
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : "刪除訂閱失敗。");
+    ElMessage.error(api.getErrorMessage(error, "刪除訂閱失敗。"));
   } finally {
     busySubscriptionId.value = null;
   }
@@ -178,6 +175,12 @@ function formatDate(value: string | null) {
 }
 
 onMounted(() => {
+  const validatedResponse = auth.consumeValidatedSubscriptions();
+  if (validatedResponse) {
+    applyPageResponse(validatedResponse);
+    isInitialLoading.value = false;
+    return;
+  }
   void loadSubscriptions();
 });
 </script>
@@ -190,7 +193,6 @@ onMounted(() => {
         <h1 class="page-title">訂閱管理</h1>
         <p class="page-description">追蹤 Feed 狀態，管理你想收到的更新。</p>
       </div>
-      <span class="text-xs text-gray-500">示範資料 · 僅儲存在目前工作階段</span>
     </div>
 
     <section class="overview-grid" aria-label="訂閱摘要">
@@ -372,9 +374,5 @@ onMounted(() => {
         </div>
       </div>
     </section>
-
-    <p class="page-footer-note">
-      UI 示範使用本機 mock；訂閱變更不會呼叫後端或寄送通知。
-    </p>
   </main>
 </template>
