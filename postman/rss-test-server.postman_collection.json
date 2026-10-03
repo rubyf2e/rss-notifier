@@ -1,0 +1,193 @@
+{
+  "info": {
+    "name": "RSS Test Server API",
+    "description": "涵蓋 rss-test-server/server.js 所有 endpoints，用於測試 RSS parsing、timeout、redirect、response-size limit 等情境。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000", "type": "string" },
+    { "key": "guid", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "GET /feed.xml",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/feed.xml", "host": ["{{baseUrl}}"], "path": ["feed.xml"] }
+      }
+    },
+    {
+      "name": "GET /articles",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/articles", "host": ["{{baseUrl}}"], "path": ["articles"] }
+      }
+    },
+    {
+      "name": "POST /articles",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status is 201', function () {",
+              "  pm.expect(pm.response.code).to.eql(201);",
+              "});",
+              "if (pm.response.code === 201) {",
+              "  const json = pm.response.json();",
+              "  pm.collectionVariables.set('guid', json.guid);",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"title\": \"新文章\",\n  \"link\": \"http://example.com/2\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/articles", "host": ["{{baseUrl}}"], "path": ["articles"] }
+      }
+    },
+    {
+      "name": "DELETE /articles/:guid",
+      "request": {
+        "method": "DELETE",
+        "url": {
+          "raw": "{{baseUrl}}/articles/{{guid}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["articles", "{{guid}}"]
+        }
+      }
+    },
+    {
+      "name": "GET /rss/invalid",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/rss/invalid", "host": ["{{baseUrl}}"], "path": ["rss", "invalid"] }
+      }
+    },
+    {
+      "name": "GET /rss/slow?seconds=3",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/rss/slow?seconds=3",
+          "host": ["{{baseUrl}}"],
+          "path": ["rss", "slow"],
+          "query": [{ "key": "seconds", "value": "3" }]
+        }
+      }
+    },
+    {
+      "name": "GET /rss/hang",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/rss/hang", "host": ["{{baseUrl}}"], "path": ["rss", "hang"] }
+      }
+    },
+    {
+      "name": "GET /rss/slow-stream?chunks=4&delayMs=500",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/rss/slow-stream?chunks=4&delayMs=500",
+          "host": ["{{baseUrl}}"],
+          "path": ["rss", "slow-stream"],
+          "query": [
+            { "key": "chunks", "value": "4" },
+            { "key": "delayMs", "value": "500" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "GET /rss/large?mb=5",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/rss/large?mb=5",
+          "host": ["{{baseUrl}}"],
+          "path": ["rss", "large"],
+          "query": [{ "key": "mb", "value": "5" }]
+        }
+      }
+    },
+    {
+      "name": "GET /rss/large-stream?mb=5",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/rss/large-stream?mb=5",
+          "host": ["{{baseUrl}}"],
+          "path": ["rss", "large-stream"],
+          "query": [{ "key": "mb", "value": "5" }]
+        }
+      }
+    },
+    {
+      "name": "GET /rss/status/:code",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/rss/status/500",
+          "host": ["{{baseUrl}}"],
+          "path": ["rss", "status", "500"]
+        }
+      }
+    },
+    {
+      "name": "GET /rss/redirect?to=URL",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/rss/redirect?to={{baseUrl}}/feed.xml",
+          "host": ["{{baseUrl}}"],
+          "path": ["rss", "redirect"],
+          "query": [{ "key": "to", "value": "{{baseUrl}}/feed.xml" }]
+        }
+      }
+    },
+    {
+      "name": "GET /rss/redirect-loop/a",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/rss/redirect-loop/a", "host": ["{{baseUrl}}"], "path": ["rss", "redirect-loop", "a"] }
+      }
+    },
+    {
+      "name": "GET /rss/redirect-loop/b",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{baseUrl}}/rss/redirect-loop/b", "host": ["{{baseUrl}}"], "path": ["rss", "redirect-loop", "b"] }
+      }
+    },
+    {
+      "name": "POST /test/feed-mode ERROR",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mode\": \"ERROR\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/test/feed-mode", "host": ["{{baseUrl}}"], "path": ["test", "feed-mode"] }
+      }
+    },
+    {
+      "name": "POST /test/feed-mode HEALTHY",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mode\": \"HEALTHY\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/test/feed-mode", "host": ["{{baseUrl}}"], "path": ["test", "feed-mode"] }
+      }
+    }
+  ]
+}

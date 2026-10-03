@@ -1,0 +1,13 @@
+{
+  "name": "rss-test-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "最小 RSS 2.0 測試 Server（無 DB / 無 Docker / 無 ORM）",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
