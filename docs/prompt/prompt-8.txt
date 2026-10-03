@@ -1,0 +1,49 @@
+依 `copilot-instructions.md` 執行。
+
+本次只實作 **Frontend UI**，不實作 Backend/API。
+
+### Scope
+
+先檢查目前 `frontend/` 架構、pages、components、composables、types、API/mock abstraction、routing 與既有 UI，再做最小必要修改。
+
+實作：
+
+1. Login Page
+2. Subscription Dashboard
+3. Add Feed UI
+4. Feed status / error UI
+5. Pause / Resume UI
+6. Delete confirmation
+7. Unsubscribe confirmation page
+8. Loading / Empty / Error / Success states
+9. 基本 responsive layout
+
+### UI 行為
+
+- Login：email 輸入、送出、loading、成功/錯誤狀態
+- Dashboard：訂閱列表、feed name/url/status/last sync/error
+- Add Feed：URL 輸入、loading、成功/錯誤
+- Feed status：active / paused / error 等狀態清楚呈現
+- Pause / Resume：操作中 loading、成功/錯誤 feedback
+- Delete：Element Plus confirmation，成功/錯誤 feedback
+- Unsubscribe：確認頁、成功/錯誤狀態
+- 列表處理 loading / empty / error
+- 避免直接暴露未來後端內部 DB id 等資料
+- mock data 與未來 API response shape 盡量一致
+
+### API / Mock
+
+- Backend/API 本次不實作。
+- 使用明確的 local mock data。
+- API 呼叫集中於現有或必要的 composable/API abstraction。
+- UI component 不直接散落 API 呼叫。
+- mock abstraction 的介面設計應讓未來可直接替換正式 API。
+- 不建立 mock server。
+
+### 完成後回報
+
+- 修改哪些檔案
+- 每個檔案修改原因
+- UI 已完成項目
+- 尚未實作的 API integration
+- Frontend validation 與結果

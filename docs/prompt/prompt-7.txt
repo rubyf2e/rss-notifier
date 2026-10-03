@@ -1,0 +1,59 @@
+依 `copilot-instructions.md` 執行。
+
+**只分析目前 `frontend/`，禁止修改、建立或刪除任何檔案，也不要執行會修改檔案的指令。**
+
+根據現有程式結構與 F1–F5 需求，規劃 UI：
+
+### F1 登入
+- Email Magic Link
+- 登入狀態
+- 登出
+
+### F2 訂閱管理
+- 新增 RSS / Atom Feed
+- 驗證失敗原因
+- 訂閱列表
+- Feed 名稱、URL、狀態、最近成功同步時間、最近錯誤
+- 暫停 / 恢復
+- 刪除
+
+### F3 Feed 狀態
+- Feed 是否正常
+- 最近同步時間
+- 最近錯誤原因
+
+### F4 Email
+- 不實作寄信流程
+- UI 可呈現相關錯誤狀態
+
+### F5 取消訂閱
+- Email token 進入確認頁
+- 不需登入
+- 成功 / 失敗狀態
+
+### 檢查
+
+檢查目前：
+
+- pages / layouts
+- components
+- composables
+- types
+- API / mock API
+- routing / auth state
+- Element Plus 使用方式
+- 現有 Tailwind / SCSS 樣式架構
+
+### 輸出
+
+1. 建議頁面與用途
+2. 元件拆分
+3. Element Plus 元件
+4. Navigation
+5. Loading / Empty / Error / Success states
+6. 後端 API 串接點
+7. 與目前 frontend 結構的對應關係
+8. 既有問題或限制
+9. 建議沿用與需要補上的 composables / types / mock abstraction
+
+只提供分析與規劃，不執行 implementation。
