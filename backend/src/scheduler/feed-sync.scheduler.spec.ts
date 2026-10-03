@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NotificationService } from '../mail/notification.service';
 import { FeedSyncService } from '../feeds/feed-sync.service';
 import { FeedSyncScheduler } from './feed-sync.scheduler';
+import { PersistentSchedulerLogger } from './persistent-scheduler-logger.service';
 
 jest.mock('../prisma/prisma.service', () => ({
   PrismaService: class PrismaService {},
@@ -13,6 +14,7 @@ describe('FeedSyncScheduler', () => {
   let configService: { get: jest.Mock };
   let feedSyncService: { syncSubscribedFeeds: jest.Mock };
   let notificationService: { enqueuePendingNotifications: jest.Mock };
+  let schedulerLogger: { append: jest.Mock };
   let dateNowSpy: jest.SpyInstance;
   let logSpy: jest.SpyInstance;
   let warnSpy: jest.SpyInstance;
@@ -33,10 +35,12 @@ describe('FeedSyncScheduler', () => {
     notificationService = {
       enqueuePendingNotifications: jest.fn().mockResolvedValue({ created: 1, queued: 1 }),
     };
+    schedulerLogger = { append: jest.fn().mockResolvedValue(undefined) };
     scheduler = new FeedSyncScheduler(
       configService as unknown as ConfigService,
       feedSyncService as unknown as FeedSyncService,
       notificationService as unknown as NotificationService,
+      schedulerLogger as unknown as PersistentSchedulerLogger,
     );
     dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(0);
     logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
@@ -65,6 +69,13 @@ describe('FeedSyncScheduler', () => {
     expect(logSpy.mock.calls.some(([message]) =>
       String(message).includes('SKIP reason=INTERVAL_NOT_REACHED elapsedMs=59999')),
     ).toBe(true);
+    expect(schedulerLogger.append).toHaveBeenCalledTimes(3);
+    expect(schedulerLogger.append.mock.calls[1][0]).toEqual(expect.objectContaining({
+      schedulerName: 'FeedSyncScheduler',
+      status: 'skipped',
+      skipReason: 'INTERVAL_NOT_REACHED',
+      elapsedMs: 59_999,
+    }));
   });
 
   it('未設定或無效間隔時預設 15 分鐘', async () => {
@@ -84,6 +95,19 @@ describe('FeedSyncScheduler', () => {
         /^SUCCESS executionId=.* durationMs=\d+ feeds=1 succeeded=1 failed=0 newArticles=2 notificationsCreated=1$/,
       ),
     )).toBe(true);
+    expect(schedulerLogger.append).toHaveBeenCalledWith(expect.objectContaining({
+      schedulerName: 'FeedSyncScheduler',
+      status: 'success',
+      feedSync: {
+        feeds: 1,
+        succeeded: 1,
+        failed: 0,
+        newArticles: 2,
+        notificationsCreated: 1,
+        feedFailures: [],
+        recoveredFeeds: [],
+      },
+    }));
   });
 
   it('單一 Feed 失敗時記錄安全警告並繼續排入通知', async () => {
@@ -122,6 +146,11 @@ describe('FeedSyncScheduler', () => {
     expect(allLoggedText).not.toContain('postgres://');
     expect(allLoggedText).not.toContain('Bearer secret');
     expect(allLoggedText).not.toContain('private.example');
+    expect(schedulerLogger.append).toHaveBeenCalledWith(expect.objectContaining({
+      schedulerName: 'FeedSyncScheduler',
+      status: 'failure',
+      error: expect.objectContaining({ message: originalError.message }),
+    }));
 
     dateNowSpy.mockReturnValue(60_000);
     await expect(scheduler.syncIfDue()).resolves.toBe(true);
@@ -131,9 +160,7 @@ describe('FeedSyncScheduler', () => {
   it('logger 發生錯誤時不覆蓋原始排程例外', async () => {
     const originalError = new Error('sync failed');
     feedSyncService.syncSubscribedFeeds.mockRejectedValueOnce(originalError);
-    errorSpy.mockImplementation(() => {
-      throw new Error('logger failed');
-    });
+    schedulerLogger.append.mockRejectedValueOnce(new Error('disk unavailable'));
 
     await expect(scheduler.syncIfDue()).rejects.toBe(originalError);
   });

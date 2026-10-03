@@ -4,6 +4,10 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomUUID } from 'node:crypto';
 import { NotificationService } from '../mail/notification.service';
 import { FeedSyncService, FeedSyncSummary } from '../feeds/feed-sync.service';
+import {
+  PersistentSchedulerLogger,
+  SchedulerRunLog,
+} from './persistent-scheduler-logger.service';
 
 const DEFAULT_INTERVAL_MINUTES = 15;
 
@@ -24,6 +28,7 @@ export class FeedSyncScheduler {
     private readonly configService: ConfigService,
     private readonly feedSyncService: FeedSyncService,
     private readonly notificationService: NotificationService,
+    private readonly schedulerLogger: PersistentSchedulerLogger,
   ) {}
 
   @Cron(CronExpression.EVERY_MINUTE)
@@ -31,6 +36,7 @@ export class FeedSyncScheduler {
     const executionId = randomUUID();
     const startedAt = Date.now();
     let ownsRun = false;
+    let syncSummary: FeedSyncSummary | undefined;
     try {
       const intervalValue = Number(
         this.configService.get<string>('FEED_SYNC_INTERVAL_MINUTES'),
@@ -44,10 +50,20 @@ export class FeedSyncScheduler {
         return false;
       }
       if (this.lastRunAt !== null && now - this.lastRunAt < intervalMinutes * 60_000) {
+        const elapsedMs = now - this.lastRunAt;
         this.logSafely(
           'log',
-          `SKIP reason=INTERVAL_NOT_REACHED elapsedMs=${now - this.lastRunAt}`,
+          `SKIP reason=INTERVAL_NOT_REACHED elapsedMs=${elapsedMs}`,
         );
+        await this.appendRunLog({
+          schedulerName: FeedSyncScheduler.name,
+          startedAt: new Date(startedAt).toISOString(),
+          completedAt: new Date(now).toISOString(),
+          status: 'skipped',
+          durationMs: now - startedAt,
+          skipReason: 'INTERVAL_NOT_REACHED',
+          elapsedMs,
+        });
         return false;
       }
 
@@ -56,7 +72,7 @@ export class FeedSyncScheduler {
       ownsRun = true;
       this.logSafely('log', `START executionId=${executionId}`);
 
-      const syncSummary: FeedSyncSummary = await this.feedSyncService.syncSubscribedFeeds();
+      syncSummary = await this.feedSyncService.syncSubscribedFeeds();
       for (const failure of syncSummary.feedFailures) {
         this.logSafely(
           'warn',
@@ -74,6 +90,7 @@ export class FeedSyncScheduler {
 
       const notificationSummary = await this.notificationService.enqueuePendingNotifications();
       const durationMs = Date.now() - startedAt;
+      const completedAt = Date.now();
       this.logSafely(
         'log',
         `SUCCESS executionId=${executionId} durationMs=${durationMs} ` +
@@ -81,18 +98,65 @@ export class FeedSyncScheduler {
           `failed=${syncSummary.failed} newArticles=${syncSummary.newArticles} ` +
           `notificationsCreated=${notificationSummary.created}`,
       );
+      await this.appendRunLog({
+        schedulerName: FeedSyncScheduler.name,
+        startedAt: new Date(startedAt).toISOString(),
+        completedAt: new Date(completedAt).toISOString(),
+        status: 'success',
+        durationMs,
+        feedSync: {
+          feeds: syncSummary.feeds,
+          succeeded: syncSummary.succeeded,
+          failed: syncSummary.failed,
+          newArticles: syncSummary.newArticles,
+          notificationsCreated: notificationSummary.created,
+          feedFailures: syncSummary.feedFailures,
+          recoveredFeeds: syncSummary.recoveredFeeds,
+        },
+      });
       return true;
     } catch (error) {
+      const completedAt = Date.now();
       this.logSafely(
         'error',
-        `FAILED executionId=${executionId} durationMs=${Date.now() - startedAt} ` +
+        `FAILED executionId=${executionId} durationMs=${completedAt - startedAt} ` +
           `errorType=${classifyError(error)}`,
       );
+      const details = error instanceof Error
+        ? { message: error.message, stack: error.stack ?? error.message }
+        : { message: String(error), stack: String(error) };
+      await this.appendRunLog({
+        schedulerName: FeedSyncScheduler.name,
+        startedAt: new Date(startedAt).toISOString(),
+        completedAt: new Date(completedAt).toISOString(),
+        status: 'failure',
+        durationMs: completedAt - startedAt,
+        ...(syncSummary ? {
+          feedSync: {
+            feeds: syncSummary.feeds,
+            succeeded: syncSummary.succeeded,
+            failed: syncSummary.failed,
+            newArticles: syncSummary.newArticles,
+            feedFailures: syncSummary.feedFailures,
+            recoveredFeeds: syncSummary.recoveredFeeds,
+          },
+        } : {}),
+        error: details,
+      });
       throw error;
     } finally {
       if (ownsRun) {
         this.isRunning = false;
       }
+    }
+  }
+
+  private async appendRunLog(entry: SchedulerRunLog): Promise<void> {
+    try {
+      await this.schedulerLogger.append(entry);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logSafely('error', `無法寫入 Scheduler log：${message}`);
     }
   }
 

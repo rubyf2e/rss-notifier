@@ -1,0 +1,1 @@
+每分鐘 Feed sync 紀錄只進 Docker stdout，應存進本機app/logs，提供專案資料夾有檔案可查詢，幫我修正目前app/logs沒有檔案的問題，並且改用txt格式，以日期為檔名，並且不同的scheduler放在不同的檔案

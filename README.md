@@ -133,16 +133,16 @@ GET /subscriptions/unsubscribe?token=<email-unsubscribe-token>
 ## Background 工作與記錄
 
 - Mail queue：`mail`。Magic Link request enqueue 收件者與登入 URL；Worker 負責套用 Handlebars template 並呼叫 MailerService。
-- Feed sync：每次到期同步已訂閱 Feed；訂閱時保存文章基準，後續透過 `(feedId, guid)` 去重。單一 Feed 失敗會記錄錯誤並繼續處理其他 Feed。
+- Feed sync：排程每分鐘檢查是否到期，到期後同步已訂閱 Feed；訂閱時保存文章基準，後續透過 `(feedId, guid)` 去重。單一 Feed 失敗會記錄錯誤並繼續處理其他 Feed。每分鐘的排程結果（包含 `SKIP`）與實際同步統計會寫入 Scheduler TXT。
 - Article notification：以 `NotificationLog` 作為持久待辦紀錄，使用同一個 `mail` queue 寄送；BullMQ 指數退避最多 5 次，最終失敗寫入 `FAILED` 與錯誤原因。
 - Redis：提供 BullMQ queue backend，不作為主要業務資料庫。
 - Magic Link cleanup：每日午夜以批次方式刪除 `usedAt IS NULL` 且 `expiresAt < now` 的資料。
-- Scheduler log：`/app/logs/backend-scheduler.jsonl`，JSON Lines 格式，記錄排程名稱、開始/結束時間、成功/失敗、耗時及必要的錯誤資訊。Docker named volume `backend_scheduler_logs` 會跨 container recreate 持久保存。
+- Scheduler log 以 `/app/logs/YYYY-MM-DD-<SchedulerName>.txt` 分檔，純文字逐行記錄排程結果；每個日期、每個 scheduler 各有獨立檔案。Compose 將 `/app/logs` bind mount 到專案的 `backend/logs`，因此檔案可直接從主機檢視，且 container recreate 或執行 `docker compose down` 後仍會保留。
 - 檢視服務 log：
 
   ```sh
   docker compose logs -f backend
-  docker compose exec backend tail -f /app/logs/backend-scheduler.jsonl
+  tail -f "backend/logs/$(date -u +%F)-FeedSyncScheduler.txt"
   ```
 
 停止服務但保留資料：
@@ -151,7 +151,14 @@ GET /subscriptions/unsubscribe?token=<email-unsubscribe-token>
 docker compose down
 ```
 
-`docker compose down -v` 會一併刪除 PostgreSQL、Redis 與 Scheduler log 等 named volumes，請只在確定要清除所有持久資料時使用。
+Scheduler log 位於專案目錄，不受 `docker compose down -v` 影響。清除 Scheduler log 時，先停止服務，再移除文字檔：
+
+```sh
+docker compose down
+rm backend/logs/*.txt
+```
+
+`docker compose down -v` 會刪除 PostgreSQL、Redis 等 named volumes，請只在確定要清除這些持久資料時使用。
 
 ## 測試與檢查
 
