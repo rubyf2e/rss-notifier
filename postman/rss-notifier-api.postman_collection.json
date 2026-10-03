@@ -102,6 +102,9 @@
                 "exec": [
                   "pm.test('無效 email 回傳 400', function () {",
                   "  pm.response.to.have.status(400);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.statusCode).to.eql(400);",
+                  "  pm.expect(body.message).to.include('email must be an email');",
                   "});"
                 ]
               }
@@ -150,6 +153,10 @@
                 "exec": [
                   "pm.test('缺少 token 回傳 400', function () {",
                   "  pm.response.to.have.status(400);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.statusCode).to.eql(400);",
+                  "  pm.expect(body.message).to.include('token must be a string');",
+                  "  pm.expect(body.message).to.include('token should not be empty');",
                   "});"
                 ]
               }
@@ -183,6 +190,30 @@
     {
       "name": "Subscription Management",
       "item": [
+        {
+          "name": "Unauthorized - list subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/subscriptions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('缺少 Bearer token 回傳 401 與明確訊息', function () {",
+                  "  pm.response.to.have.status(401);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.statusCode).to.eql(401);",
+                  "  pm.expect(body.message).to.eql('Bearer access token is required.');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
         {
           "name": "Create subscription",
           "request": {
@@ -236,8 +267,41 @@
                   "pm.test('回傳目前使用者的訂閱清單', function () {",
                   "  pm.response.to.have.status(200);",
                   "  const body = pm.response.json();",
-                  "  pm.expect(body).to.be.an('array');",
-                  "  pm.expect(body.some((subscription) => subscription.id === pm.collectionVariables.get('subscriptionId'))).to.eql(true);",
+                  "  pm.expect(body.items).to.be.an('array');",
+                  "  pm.expect(body.items.some((subscription) => subscription.id === pm.collectionVariables.get('subscriptionId'))).to.eql(true);",
+                  "  pm.expect(body.page).to.eql(1);",
+                  "  pm.expect(body.limit).to.eql(20);",
+                  "  pm.expect(body.total).to.be.a('number');",
+                  "  pm.expect(body.totalPages).to.eql(Math.ceil(body.total / body.limit));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List subscriptions - pagination",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": "{{baseUrl}}/subscriptions?page=1&limit=1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('分頁參數及回應符合 contract', function () {",
+                  "  pm.response.to.have.status(200);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.items).to.be.an('array').and.have.lengthOf.at.most(1);",
+                  "  pm.expect(body.page).to.eql(1);",
+                  "  pm.expect(body.limit).to.eql(1);",
+                  "  pm.expect(body.total).to.be.a('number');",
+                  "  pm.expect(body.totalPages).to.eql(Math.ceil(body.total / body.limit));",
                   "});"
                 ]
               }
@@ -267,6 +331,9 @@
                 "exec": [
                   "pm.test('重複訂閱回傳 409', function () {",
                   "  pm.response.to.have.status(409);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.statusCode).to.eql(409);",
+                  "  pm.expect(body.message).to.eql('This feed is already subscribed.');",
                   "});"
                 ]
               }
@@ -367,6 +434,30 @@
               }
             }
           ]
+        },
+        {
+          "name": "Unsubscribe from feed - invalid token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/subscriptions/unsubscribe?token={{invalidUnsubscribeToken}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('格式正確但不存在的取消訂閱 token 回傳 400', function () {",
+                  "  pm.response.to.have.status(400);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.statusCode).to.eql(400);",
+                  "  pm.expect(body.message).to.eql('Unsubscribe link is invalid.');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     }
@@ -405,6 +496,11 @@
     {
       "key": "unsubscribeToken",
       "value": "paste-token-from-notification-email",
+      "type": "string"
+    },
+    {
+      "key": "invalidUnsubscribeToken",
+      "value": "0000000000000000000000000000000000000000000000000000000000000000",
       "type": "string"
     }
   ]

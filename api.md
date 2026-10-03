@@ -8,7 +8,7 @@
 - JSON 請求使用 `Content-Type: application/json`。未要求 JSON body 的 endpoint 不需要此 header。
 - 需要登入的 endpoint 使用 `Authorization: Bearer <accessToken>`。
 - 錯誤採 NestJS 預設例外格式，通常包含 `statusCode`、`message`、`error`。ValidationPipe 驗證失敗時，`message` 為驗證訊息陣列；其他例外通常是字串。
-- 目前共有 **9 個唯一的 method + path endpoint**。Postman 另包含重複訂閱與登入錯誤情境，合計 13 個 request 範例。
+- 目前共有 **9 個唯一的 method + path endpoint**。Postman Collection 包含成功流程、輸入驗證、分頁、授權與錯誤情境測試。
 
 ## Service
 
@@ -48,7 +48,7 @@
 ```
 
 - Auth 行為：以相同訊息回應，不在 response 中揭露該 Email 是否已存在；目前 Service 會建立或取得使用者、建立登入連結並排入寄信工作。登入連結期限由 `MAGIC_LINK_TTL_MINUTES` 設定，未設定或值無效時使用 15 分鐘。
-- Error responses：DTO 驗證失敗為 `400 Bad Request`。其他寄信佇列或伺服器錯誤沒有在此 endpoint 定義額外的 API error mapping。
+- Error responses：DTO 驗證失敗為 `400 Bad Request`，NestJS 預設回應的 `message` 為驗證訊息陣列。其他寄信佇列或伺服器錯誤沒有在此 endpoint 定義額外的 API error mapping。
 
 ### 驗證 Email 登入連結
 
@@ -71,7 +71,7 @@
 ```
 
 - 欄位說明：`user.id` 是公開 UUID，不是資料庫內部 ID。登入連結只能使用一次，且不可逾期；原始 magic-link token 不會出現在成功 response。
-- Error responses：token 無效、過期或已使用時回傳 `401 Unauthorized`，訊息為 `Magic link is invalid, expired, or already used.`。缺少或空 token 為 `400 Bad Request`。
+- Error responses：token 無效、過期或已使用時回傳 `401 Unauthorized`，訊息為 `Magic link is invalid, expired, or already used.`。缺少或空 token 為 `400 Bad Request`，`message` 為 ValidationPipe 的驗證訊息陣列。
 - Auth 行為：成功驗證後簽發 JWT。JWT 期限由 `JWT_EXPIRES_IN` 設定；本 API 不在 response 中另回傳過期時間。
 
 ## Subscriptions
@@ -111,7 +111,7 @@
 ```
 
 - 欄位說明：`id` 是訂閱公開 UUID；`feed.title` 若來源沒有標題，Backend 以 feed URL 作為標題。`lastSyncedAt`、`lastError` 可能為 `null`。
-- Error responses：`400 Bad Request`（DTO 驗證或 feed URL/fetch/parse 失敗）；`401 Unauthorized`（缺少、無效或過期 JWT，或 token 對應的使用者已不存在）；`409 Conflict`（該使用者已訂閱此 feed，訊息 `This feed is already subscribed.`）。
+- Error responses：`400 Bad Request`（DTO 驗證或 feed URL/fetch/parse 失敗）；`401 Unauthorized`（缺少 Bearer token 時訊息為 `Bearer access token is required.`；JWT 無效或過期時為 `Access token is invalid or expired.`；使用者已不存在時為 `User no longer exists.`）；`409 Conflict`（該使用者已訂閱此 feed，訊息 `This feed is already subscribed.`）。DTO 驗證錯誤的 `message` 為訊息陣列。
 
 ### 列出訂閱
 
@@ -149,7 +149,7 @@
 ```
 
 - 欄位說明：`items` 為訂閱 response 陣列；`total` 是使用者的訂閱總數；`totalPages` 為總頁數，沒有訂閱時為 `0`。超出資料範圍的有效頁數會回傳空的 `items`。
-- Error responses：`400 Bad Request`（`page` / `limit` 不是整數、小於 1，或 `limit` 大於 100）；`401 Unauthorized`（Bearer token 缺少、無效、過期或使用者已不存在）。
+- Error responses：`400 Bad Request`（`page` / `limit` 不是整數、小於 1，或 `limit` 大於 100；`message` 為驗證訊息陣列）；`401 Unauthorized`（缺少 Bearer token 時訊息為 `Bearer access token is required.`；JWT 無效或過期時為 `Access token is invalid or expired.`；使用者已不存在時為 `User no longer exists.`）。
 
 ### 暫停訂閱
 
@@ -160,7 +160,7 @@
 - Path parameters：`publicId` 為訂閱公開 UUID。Controller 未設定 UUID 格式驗證；找不到該使用者名下的訂閱時回傳 `404`。
 - Query / body：無。
 - 成功：`200 OK`，回傳訂閱物件，`status` 為 `PAUSED`，其他欄位同「建立訂閱」response。已是 `PAUSED` 時仍成功回傳目前訂閱。
-- Error responses：`401 Unauthorized`（Bearer token 無效等）；`404 Not Found`（訂閱不存在或不屬於目前使用者），訊息 `Subscription not found.`。
+- Error responses：`401 Unauthorized`（缺少 Bearer token 時訊息為 `Bearer access token is required.`；JWT 無效或過期時為 `Access token is invalid or expired.`；使用者已不存在時為 `User no longer exists.`）；`404 Not Found`（訂閱不存在或不屬於目前使用者），訊息 `Subscription not found.`。
 
 ### 恢復訂閱
 
@@ -171,7 +171,7 @@
 - Path parameters：`publicId` 為訂閱公開 UUID；格式不另外驗證。
 - Query / body：無。
 - 成功：`200 OK`，回傳訂閱物件，`status` 為 `ACTIVE`，其他欄位同「建立訂閱」response。已是 `ACTIVE` 時仍成功回傳目前訂閱。
-- Error responses：`401 Unauthorized`（Bearer token 無效等）；`404 Not Found`（訂閱不存在或不屬於目前使用者），訊息 `Subscription not found.`。
+- Error responses：`401 Unauthorized`（缺少 Bearer token 時訊息為 `Bearer access token is required.`；JWT 無效或過期時為 `Access token is invalid or expired.`；使用者已不存在時為 `User no longer exists.`）；`404 Not Found`（訂閱不存在或不屬於目前使用者），訊息 `Subscription not found.`。
 
 ### 刪除訂閱
 
@@ -195,15 +195,8 @@
 - Query parameters：`token` 必填，64 個小寫十六進位字元。
 - Path / body：無。
 - 成功：`200 OK`，`Content-Type: text/html; charset=utf-8`，回傳取消確認 HTML 頁面。若該訂閱已取消，再次使用仍回傳相同成功頁面。
-- Error responses：token 缺少、格式錯誤或找不到對應訂閱時為 `400 Bad Request`。格式錯誤由 DTO 驗證拒絕；格式正確但無效時訊息為 `Unsubscribe link is invalid.`。
+- Error responses：token 缺少或格式錯誤時為 `400 Bad Request`，`message` 為 DTO 驗證訊息陣列；格式正確但找不到對應訂閱時為 `400 Bad Request`，訊息為 `Unsubscribe link is invalid.`。
 - 安全與欄位說明：token 不會由訂閱建立或列表 API 回傳；Backend 僅保存 token hash。此公開端點透過 Email token 指定要取消的訂閱，不使用登入使用者身分。
-
-## Postman / Backend 差異
-
-- **訂閱清單 response 不一致：** Postman 測試腳本預期 `GET /subscriptions` 直接回傳陣列；目前 Backend 實際回傳 `{ items, page, limit, total, totalPages }` 分頁物件。本文依 Backend response 撰寫。
-- **訂閱清單 query parameters：** Postman request 未列出 `page`、`limit`；Backend 實際支援兩者，預設分別為 `1`、`20`，且 `limit` 上限為 `100`。
-- **錯誤情境覆蓋：** Postman 有 magic-link 驗證缺少/無效 token、無效 Email、重複訂閱的測試；其餘錯誤狀態與授權細節依目前 DTO、Guard、Service 及 NestJS 預設例外處理整理，並非 Postman 中都有 response example。
-- **Response 範例：** Collection 以測試斷言描述部分成功欄位，沒有提供完整 JSON response example；本文的完整 response 結構依 Backend mapping 整理，動態值以佔位文字表示。
 
 ## 非 HTTP 工作
 
