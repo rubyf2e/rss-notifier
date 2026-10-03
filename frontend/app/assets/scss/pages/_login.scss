@@ -32,7 +32,7 @@
 .section-kicker {
   margin: 0 0 12px;
   color: var(--color-green);
-  font-size: 11px;
+  font-size: 15px;
   font-weight: 750;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -52,7 +52,7 @@
 
 .login-aside h1 {
   max-width: 430px;
-  font-size: clamp(36px, 4.5vw, 58px);
+  font-size: clamp(40px, 4.5vw, 62px);
   line-height: 1.08;
 }
 
@@ -60,12 +60,12 @@
   max-width: 380px;
   margin: 20px 0 0;
   color: #c7d9d1;
-  font-size: 16px;
+  font-size: 20px;
 }
 
 .login-aside-foot {
   color: #a9c0b7;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .login-main {
@@ -80,7 +80,7 @@
 
 .login-card h2 {
   margin-bottom: 8px;
-  font-size: 32px;
+  font-size: 36px;
 }
 
 .login-card-intro {
@@ -91,5 +91,5 @@
 .login-hint {
   margin-top: 20px;
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: 16px;
 }

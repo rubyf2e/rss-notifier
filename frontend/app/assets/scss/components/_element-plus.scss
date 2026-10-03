@@ -1,3 +1,12 @@
+:root {
+  --el-font-size-extra-large: 24px;
+  --el-font-size-large: 22px;
+  --el-font-size-medium: 20px;
+  --el-font-size-base: 18px;
+  --el-font-size-small: 17px;
+  --el-font-size-extra-small: 16px;
+}
+
 .login-card .el-input__wrapper,
 .feed-form .el-input__wrapper {
   min-height: 44px;

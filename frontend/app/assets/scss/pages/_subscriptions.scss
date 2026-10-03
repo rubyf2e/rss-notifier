@@ -1,5 +1,5 @@
 .page-title {
-  font-size: clamp(32px, 4vw, 42px);
+  font-size: clamp(36px, 4vw, 46px);
   line-height: 1.12;
 }
 
@@ -26,14 +26,14 @@
 .overview-label {
   display: block;
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .overview-value {
   display: block;
   margin-top: 7px;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: 28px;
+  font-size: 32px;
   line-height: 1;
 }
 
@@ -55,14 +55,14 @@
 
 .section-header h2 {
   margin: 0;
-  font-size: 15px;
+  font-size: 19px;
   font-weight: 700;
 }
 
 .section-header p {
   margin: 3px 0 0;
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .feed-form {
@@ -95,7 +95,7 @@
 .feed-name {
   overflow: hidden;
   margin: 0;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -107,19 +107,19 @@
   overflow-wrap: anywhere;
   margin-top: 4px;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: 15px;
 }
 
 .feed-meta-label {
   margin: 0 0 3px;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .feed-meta-value {
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .status-stack {
@@ -134,7 +134,7 @@
   align-items: center;
   border-radius: 4px;
   padding: 2px 8px;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
 }
