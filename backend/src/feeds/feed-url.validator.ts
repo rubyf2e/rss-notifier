@@ -8,6 +8,12 @@ type HostResolver = (hostname: string) => Promise<ResolvedAddress[]>;
 
 const resolveHost: HostResolver = (hostname) => lookup(hostname, { all: true, verbatim: true });
 
+export class FeedSsrfBlockedException extends BadRequestException {
+  constructor() {
+    super('Feed URL is blocked by SSRF protection.');
+  }
+}
+
 function isPublicAddress(address: string): boolean {
   try {
     return ipaddr.process(address).range() === 'unicast';
@@ -19,9 +25,9 @@ function isPublicAddress(address: string): boolean {
 export async function assertPublicFeedUrl(
   url: URL,
   resolver: HostResolver = resolveHost,
-): Promise<void> {
+): Promise<ResolvedAddress[]> {
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
-    throw new BadRequestException('Feed URL must be an HTTP or HTTPS URL without credentials.');
+    throw new FeedSsrfBlockedException();
   }
 
   const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
@@ -31,24 +37,74 @@ export async function assertPublicFeedUrl(
     hostname.endsWith('.local') ||
     hostname.endsWith('.internal')
   ) {
-    throw new BadRequestException('Feed URL cannot target a local or internal host.');
+    throw new FeedSsrfBlockedException();
   }
 
   if (isIP(hostname)) {
     if (!isPublicAddress(hostname)) {
-      throw new BadRequestException('Feed URL cannot target a local or internal address.');
+      throw new FeedSsrfBlockedException();
     }
-    return;
+    return [{ address: hostname, family: isIP(hostname) }];
   }
 
   let addresses: ResolvedAddress[];
   try {
     addresses = await resolver(hostname);
   } catch {
-    throw new BadRequestException('Feed URL host could not be resolved.');
+    throw new FeedSsrfBlockedException();
   }
 
   if (addresses.length === 0 || addresses.some(({ address }) => !isPublicAddress(address))) {
-    throw new BadRequestException('Feed URL cannot resolve to a local or internal address.');
+    throw new FeedSsrfBlockedException();
   }
+
+  return addresses;
+}
+
+export function createPinnedFeedLookup(
+  hostname: string,
+  addresses: ResolvedAddress[],
+): (
+  hostname: string,
+  options: { all?: boolean; family?: number | 'IPv4' | 'IPv6' },
+  callback: (
+    error: NodeJS.ErrnoException | null,
+    address: string | ResolvedAddress[],
+    family?: number,
+  ) => void,
+) => void {
+  const expectedHostname = hostname.toLowerCase();
+  const lookupPinnedAddress = (
+    requestedHostname: string,
+    options: { all?: boolean; family?: number | 'IPv4' | 'IPv6' },
+    callback: (
+      error: NodeJS.ErrnoException | null,
+      address: string | ResolvedAddress[],
+      family?: number,
+    ) => void,
+  ) => {
+    const matchingAddresses = requestedHostname.toLowerCase() === expectedHostname
+      ? addresses.filter(({ family }) =>
+        !options.family ||
+        family === options.family ||
+        (options.family === 'IPv4' && family === 4) ||
+        (options.family === 'IPv6' && family === 6),
+      )
+      : [];
+    if (matchingAddresses.length === 0) {
+      const error = Object.assign(new Error('Feed address validation failed.'), {
+        code: 'EACCES',
+      });
+      callback(error, options.all ? [] : '', 0);
+      return;
+    }
+
+    if (options.all) {
+      callback(null, matchingAddresses);
+      return;
+    }
+    callback(null, matchingAddresses[0].address, matchingAddresses[0].family);
+  };
+
+  return lookupPinnedAddress;
 }

@@ -1,0 +1,115 @@
+依 `copilot-instructions.md` 執行。
+
+本次只處理 **Backend RSS Feed HTTP client 的 SSRF 防護**。
+
+### Requirements
+
+先檢查目前 Feed Fetch / HTTP client / redirect / DNS / timeout 的完整流程，找出實際發送 HTTP request 的位置。
+
+實作 SSRF 防護：
+
+- Feed URL 在 request 前必須驗證。
+- 禁止連線至：
+  - `localhost`
+  - loopback
+  - RFC1918 private IPv4
+  - link-local
+  - unspecified / multicast / reserved 等不可作為外部 Feed 目的地的特殊 IP
+  - IPv6 loopback / link-local / unique-local 等內部位址
+  - IPv4-mapped IPv6 等可繞過 IPv4 檢查的形式
+- hostname 必須解析後再檢查實際 IP。
+- 不可只檢查 URL 字串或 hostname。
+- DNS 解析結果只要包含禁止的 IP，就拒絕該 request。
+- 必須防止 DNS rebinding / hostname 解析後連到內網的情況。
+- Redirect 必須重新執行完整 SSRF 驗證；不能只驗證最初 URL。
+- Redirect 到 localhost / private / link-local / reserved / IPv6 internal address 時必須拒絕。
+- 不要因為 redirect 而繞過原本的 SSRF policy。
+- 沿用目前既有 HTTP client、timeout、AbortController、redirect handling，不建立第二套 HTTP client。
+- 不新增 package。
+- 不修改 Frontend。
+- 不修改 Feed schema。
+- 不修改 API contract，除非現有 error handling 必須調整。
+- 不記錄完整 URL 中可能包含的敏感資訊；error message 不應包含 response body。
+
+### DNS / Connection
+
+特別檢查目前 HTTP client 是否存在：
+
+- DNS lookup → IP 驗證 → HTTP connection 之間的 TOCTOU / DNS rebinding 問題。
+- 若現有 client architecture 可以安全地在實際 connection 使用的 IP 上執行 allow/deny 檢查，優先採用。
+- 不要只做一次獨立 DNS lookup 後，就假設後續 HTTP connection 一定使用相同 IP。
+- 若目前 HTTP client / Node.js API 的限制使完整 connection-level 防護需要調整 request 流程，採最小必要修改，並說明原因。
+
+### URL Validation
+
+檢查並拒絕容易繞過 SSRF policy 的形式，例如：
+
+- `http://127.0.0.1`
+- `http://localhost`
+- `http://0.0.0.0`
+- `http://[::1]`
+- IPv4 decimal / hexadecimal / non-standard representations
+- IPv4-mapped IPv6
+- hostname 解析到 private / loopback / link-local IP
+- redirect 到上述位址
+
+正常公開 RSS / Atom Feed 的既有行為不得改變。
+
+### Error Handling
+
+SSRF blocked 必須產生穩定、可辨識的 application error。
+
+既有：
+
+- Feed validation
+- Feed sync
+- Scheduler
+- timeout
+- HTTP status
+- parser error
+
+處理流程不得因此被破壞。
+
+單一 Feed 被 SSRF policy 拒絕時，不得造成 scheduler 整體停止。
+
+不要把底層 DNS / socket / response body 的敏感細節直接暴露給 API 或 log。
+
+### Tests
+
+先檢查現有 Feed HTTP client tests / RSS test server / mock HTTP infrastructure，優先重用。
+
+至少補充 regression tests：
+
+1. `127.0.0.1` 被拒絕。
+2. `localhost` 被拒絕。
+3. `::1` 被拒絕。
+4. RFC1918 private IPv4 被拒絕。
+5. link-local IP 被拒絕。
+6. IPv4-mapped IPv6 被拒絕。
+7. hostname 解析到 private IP 時被拒絕。
+8. hostname 解析到 public IP 時可正常 request。
+9. redirect 到 `localhost` / private IP 時被拒絕。
+10. redirect 經過多次跳轉時，每一跳都重新驗證。
+11. 正常公開 Feed 的既有 fetch / parse 行為不受影響。
+12. SSRF blocked 不會讓 scheduler 整體失敗。
+
+若測試需要 DNS mock，優先使用現有 test infrastructure，不新增 package。
+
+### Validation
+
+先執行相關 Feed HTTP client / SSRF tests，再執行：
+
+```bash
+docker compose exec backend npm test
+docker compose exec backend npm run lint
+docker compose exec backend npm run build
+```
+
+完成後只回報：
+
+1. 修改檔案
+2. SSRF 防護實作位置
+3. IPv4 / IPv6 / DNS / redirect 的防護方式
+4. DNS rebinding 的處理方式
+5. Tests / validation 結果
+6. 若仍存在無法完全消除的 TOCTOU / connection-level 限制，明確說明

@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import Parser from 'rss-parser';
-import { assertPublicFeedUrl } from './feed-url.validator';
+import { Agent } from 'undici';
+import { assertPublicFeedUrl, createPinnedFeedLookup } from './feed-url.validator';
 
 const MAX_FEED_BYTES = 5 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
@@ -42,13 +43,19 @@ export class FeedFetcherService {
     url.hash = '';
 
     for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
-      await assertPublicFeedUrl(url);
+      const addresses = await assertPublicFeedUrl(url);
+      const dispatcher = new Agent({
+        connect: {
+          lookup: createPinnedFeedLookup(url.hostname.replace(/^\[|\]$/g, ''), addresses),
+        },
+      });
 
       const requestController = new AbortController();
       let response: Response;
       try {
         response = await fetch(url, {
           redirect: 'manual',
+          dispatcher,
           signal: AbortSignal.any([
             AbortSignal.timeout(10_000),
             requestController.signal,
@@ -57,12 +64,15 @@ export class FeedFetcherService {
             accept: 'application/atom+xml, application/rss+xml, application/xml, text/xml, */*',
             'user-agent': 'rss-notifier/1.0',
           },
-        });
+        } as RequestInit & { dispatcher: Agent });
       } catch {
+        await dispatcher.destroy().catch(() => undefined);
         throw new BadRequestException('Feed URL could not be reached.');
       }
 
       if (response.status >= 300 && response.status < 400) {
+        await response.body?.cancel().catch(() => undefined);
+        await dispatcher.destroy().catch(() => undefined);
         const location = response.headers.get('location');
         if (!location || redirectCount === MAX_REDIRECTS) {
           throw new BadRequestException('Feed URL has an invalid or excessive redirect chain.');
@@ -77,6 +87,8 @@ export class FeedFetcherService {
       }
 
       if (!response.ok) {
+        await response.body?.cancel().catch(() => undefined);
+        await dispatcher.destroy().catch(() => undefined);
         throw new BadRequestException(`Feed URL returned HTTP ${response.status}.`);
       }
 
@@ -84,13 +96,16 @@ export class FeedFetcherService {
       if (contentLength > MAX_FEED_BYTES) {
         requestController.abort();
         await response.body?.cancel().catch(() => undefined);
+        await dispatcher.destroy().catch(() => undefined);
         throw new FeedResponseTooLargeException();
       }
 
       let body: string;
       try {
         body = await this.readResponseBody(response, requestController);
+        await dispatcher.close();
       } catch (error) {
+        await dispatcher.destroy().catch(() => undefined);
         if (error instanceof FeedResponseTooLargeException) {
           throw error;
         }

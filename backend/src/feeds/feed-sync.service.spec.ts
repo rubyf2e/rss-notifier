@@ -3,6 +3,7 @@ import {
   FeedFetcherService,
   FeedResponseTooLargeException,
 } from './feed-fetcher.service';
+import { FeedSsrfBlockedException } from './feed-url.validator';
 import { FeedSyncService } from './feed-sync.service';
 
 jest.mock('../prisma/prisma.service', () => ({
@@ -194,5 +195,27 @@ describe('FeedSyncService', () => {
         lastErrorAt: expect.any(Date),
       },
     });
+  });
+
+  it('將 SSRF 拒絕分類並繼續同步其他 Feed', async () => {
+    feedFetcher.fetchAndParse.mockReset()
+      .mockRejectedValueOnce(new FeedSsrfBlockedException())
+      .mockResolvedValueOnce({
+        url: subscribedFeeds[1].url,
+        title: 'Healthy Feed',
+        description: null,
+        siteUrl: null,
+        items: [],
+      });
+
+    const summary = await service.syncSubscribedFeeds();
+
+    expect(summary.feedFailures).toEqual([{
+      feedId: '1',
+      errorType: 'FeedSsrfBlockedException',
+      durationMs: expect.any(Number),
+    }]);
+    expect(summary.succeeded).toBe(1);
+    expect(summary.failed).toBe(1);
   });
 });

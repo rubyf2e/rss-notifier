@@ -4,6 +4,7 @@ import {
   FeedFetcherService,
   FeedResponseTooLargeException,
 } from './feed-fetcher.service';
+import { FeedSsrfBlockedException } from './feed-url.validator';
 
 export interface FeedSyncSummary {
   feeds: number;
@@ -15,6 +16,9 @@ export interface FeedSyncSummary {
 }
 
 function classifyError(error: unknown): string {
+  if (error instanceof FeedSsrfBlockedException) {
+    return 'FeedSsrfBlockedException';
+  }
   if (error instanceof FeedResponseTooLargeException) {
     return 'FeedResponseTooLargeException';
   }

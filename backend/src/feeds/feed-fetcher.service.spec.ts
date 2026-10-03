@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { FeedFetcherService } from './feed-fetcher.service';
+import { FeedSsrfBlockedException } from './feed-url.validator';
 
 describe('FeedFetcherService', () => {
   let service: FeedFetcherService;
@@ -33,6 +34,9 @@ describe('FeedFetcherService', () => {
         publishedAt: new Date('2026-10-02T00:00:00.000Z'),
       }],
     });
+    expect(fetchSpy.mock.calls[0][1]).toEqual(expect.objectContaining({
+      dispatcher: expect.anything(),
+    }));
   });
 
   it('拒絕沒有 Feed 標題的普通網頁', async () => {
@@ -88,8 +92,25 @@ describe('FeedFetcherService', () => {
     }));
 
     await expect(service.fetchAndParse('http://8.8.8.8/feed.xml')).rejects.toBeInstanceOf(
-      BadRequestException,
+      FeedSsrfBlockedException,
     );
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('多次 redirect 時逐跳驗證目的位址', async () => {
+    fetchSpy
+      .mockResolvedValueOnce(new Response(null, {
+        status: 302,
+        headers: { location: 'http://1.1.1.1/next' },
+      }))
+      .mockResolvedValueOnce(new Response(null, {
+        status: 302,
+        headers: { location: 'http://[::1]/private-feed' },
+      }));
+
+    await expect(service.fetchAndParse('http://8.8.8.8/feed.xml')).rejects.toBeInstanceOf(
+      FeedSsrfBlockedException,
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 });
