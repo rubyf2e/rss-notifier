@@ -1,0 +1,84 @@
+完整檢查並修正 `backend/src` 所有 production code 的 N+1 Query 問題。
+
+範圍：
+- 排除 test、module wiring、純設定與 scheduler file logger。
+- 檢查所有 Prisma / database access。
+- 特別檢查：
+  - `notification.service.ts`
+  - `article-cleanup.scheduler.ts`
+  - `feed-sync.service.ts`
+  - `mail.processor.ts`
+  - `subscriptions.service.ts`
+  - `auth.service.ts`
+  - `magic-link-cleanup.scheduler.ts`
+  - 以及其他實際存取 DB 的 production code。
+
+要求：
+
+1. 先完整盤點所有可能的 N+1：
+   - `for` / `for...of` / `forEach` / `while` / map 等迴圈中的 DB query。
+   - 迴圈內逐筆 `findUnique` / `findFirst` / `count` / `create` / `update` / `delete` 等。
+   - 逐筆查 relation 可以改成 `include` / `select` / `findMany` / `groupBy` / `createMany` / `updateMany` 等批次操作的地方。
+   - service → service → Prisma 的間接 N+1。
+   - transaction 中仍會對相同資料逐筆查詢的情況。
+   - scheduler / processor 每個 item/job 都重複查詢相同資料的情況。
+
+2. 判斷「實際 N+1」而不是單純看到 loop 就修改：
+   - 如果查詢數會隨資料筆數線性增加，且可以合理批次化，列為 N+1。
+   - 如果逐筆 query 有明確業務必要性，保留並說明原因。
+   - 不為了追求查詢次數而犧牲正確性、transaction isolation 或既有業務行為。
+
+3. 直接修正所有確認存在的 N+1：
+   - 優先使用既有 Prisma / PostgreSQL 能力。
+   - 優先批次 query、relation include/select、`createMany`、`updateMany`、`groupBy` 等。
+   - 不新增 dependency。
+   - 不建立新的 DB abstraction。
+   - 不修改 API contract、schema 或無關功能。
+   - 保持現有結果、排序、權限、去重、通知與錯誤處理行為一致。
+
+4. 特別檢查 `notification.service.ts`：
+   - subscription 迴圈內是否逐筆查 Article。
+   - 是否逐筆建立 Notification / NotificationLog。
+   - 可以批次取得 Article、subscription 或建立資料時，改成批次操作。
+   - 確保不同 subscription、不同 user 的資料不會互相污染。
+   - 保持現有 notification deduplication 與狀態判斷。
+
+5. 特別檢查 `article-cleanup.scheduler.ts`：
+   - 不要每個 feed 先 `count` 再逐筆查詢再逐筆 delete。
+   - 若可以用 DB query 一次取得應保留/刪除的資料，優先批次處理。
+   - 保持「每個 Feed 保留 N 篇」的既有清理規則。
+   - 大量資料仍需避免一次載入整個 Article table。
+
+6. 特別檢查 `feed-sync.service.ts`：
+   - 確認是否存在 feed → article → notification 等巢狀逐筆 query。
+   - 能批次化的查詢與寫入批次化。
+   - 保持 feed sync 的去重、first sync 不通知、pause/resume 與 concurrency 行為。
+
+7. 特別檢查 `mail.processor.ts`：
+   - 確認每個 job 是否重複查詢相同 notification / subscription / user。
+   - 不要為了減少 query 而改變 queue job 的資料契約。
+
+8. 測試：
+   - 先保留並更新既有 tests。
+   - 為每個實際修正的 N+1 補 regression test。
+   - 測試不只驗證結果，也要在合理範圍確認 query 次數沒有隨資料筆數線性增加。
+   - 不修改測試來掩蓋錯誤實作。
+
+9. 完成後重新搜尋整個 `backend/src`：
+   - 再次檢查所有 DB access + loops。
+   - 確認沒有遺漏的 production N+1。
+   - 對仍保留的逐筆 DB query 說明為何不能/不應批次化。
+
+10. 驗證：
+   - `docker compose exec backend npm run lint`
+   - `docker compose exec backend npm test`
+   - `docker compose exec backend npm run build`
+
+直接檢查並修改，不要只產生報告。
+
+完成後簡潔回報：
+1. 發現哪些 N+1
+2. 各自如何修正
+3. 哪些逐筆 query 刻意保留及原因
+4. 修改檔案
+5. 測試 / lint / build 結果

@@ -8,27 +8,12 @@ jest.mock('../prisma/prisma.service', () => ({
   PrismaService: class PrismaService {},
 }));
 
-type ArticleFixture = {
-  id: bigint;
-  firstSeenAt: Date;
-  notifications: Array<{ id: bigint }>;
-};
-
-function makeArticles(firstId: bigint, count: number, firstSeenAt = new Date('2026-10-01T00:00:00Z')) {
-  return Array.from({ length: count }, (_, index): ArticleFixture => ({
-    id: firstId + BigInt(index),
-    firstSeenAt,
-    notifications: [],
-  }));
-}
-
 describe('Article 清理排程', () => {
   let scheduler: ArticleCleanupScheduler;
   let configService: { get: jest.Mock };
   let prisma: {
     feed: { findMany: jest.Mock };
-    article: { count: jest.Mock; findMany: jest.Mock; deleteMany: jest.Mock };
-    subscription: { findMany: jest.Mock };
+    $executeRaw: jest.Mock;
   };
   let schedulerLogger: { append: jest.Mock };
 
@@ -36,12 +21,7 @@ describe('Article 清理排程', () => {
     configService = { get: jest.fn().mockReturnValue('2') };
     prisma = {
       feed: { findMany: jest.fn().mockResolvedValue([]) },
-      article: {
-        count: jest.fn(),
-        findMany: jest.fn(),
-        deleteMany: jest.fn(),
-      },
-      subscription: { findMany: jest.fn().mockResolvedValue([]) },
+      $executeRaw: jest.fn().mockResolvedValue(0),
     };
     schedulerLogger = { append: jest.fn().mockResolvedValue(undefined) };
     const module: TestingModule = await Test.createTestingModule({
@@ -56,51 +36,26 @@ describe('Article 清理排程', () => {
     scheduler = module.get(ArticleCleanupScheduler);
   });
 
-  it('超過保留數量時，只刪除排名在保留範圍外的舊文章並分批處理', async () => {
+  it('以單次資料庫批次操作依 Feed 排名清理超額文章', async () => {
     prisma.feed.findMany
       .mockResolvedValueOnce([{ id: 7n }])
       .mockResolvedValueOnce([]);
-    prisma.article.count.mockResolvedValue(504);
-    prisma.article.findMany
-      .mockResolvedValueOnce(makeArticles(1n, 500))
-      .mockResolvedValueOnce(makeArticles(501n, 2));
-    prisma.article.deleteMany
-      .mockResolvedValueOnce({ count: 500 })
-      .mockResolvedValueOnce({ count: 4 });
+    prisma.$executeRaw.mockResolvedValueOnce(504);
 
     await expect(scheduler.cleanupOldArticles()).resolves.toBe(504);
 
-    expect(prisma.article.findMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      where: { feedId: 7n },
-      orderBy: [
-        { publishedAt: { sort: 'desc', nulls: 'last' } },
-        { firstSeenAt: 'desc' },
-        { id: 'desc' },
-      ],
-      skip: 2,
-      take: 500,
-    }));
-    expect(prisma.article.findMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
-      skip: 2,
-      take: 2,
-    }));
-    expect(prisma.article.deleteMany).toHaveBeenCalledTimes(2);
-    expect(prisma.article.deleteMany.mock.calls[0][0].where).toEqual({
-      id: { in: makeArticles(1n, 500).map((article) => article.id) },
-      notifications: { none: {} },
-    });
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    const [query, ...values] = prisma.$executeRaw.mock.calls[0];
+    expect(query.join('')).toContain('ROW_NUMBER() OVER');
+    expect(query.join('')).toContain('PARTITION BY article.feed_id');
+    expect(query.join('')).toContain('article_rank >');
+    expect(values).toEqual([0n, 7n, 2]);
   });
 
   it('未超過保留數量時不刪除文章', async () => {
-    prisma.feed.findMany
-      .mockResolvedValueOnce([{ id: 7n }])
-      .mockResolvedValueOnce([]);
-    prisma.article.count.mockResolvedValue(2);
-
     await expect(scheduler.cleanupOldArticles()).resolves.toBe(0);
 
-    expect(prisma.article.findMany).not.toHaveBeenCalled();
-    expect(prisma.article.deleteMany).not.toHaveBeenCalled();
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
   });
 
   it('未設定保留數量時預設每個 Feed 保留五篇', async () => {
@@ -108,74 +63,65 @@ describe('Article 清理排程', () => {
     prisma.feed.findMany
       .mockResolvedValueOnce([{ id: 7n }])
       .mockResolvedValueOnce([]);
-    prisma.article.count.mockResolvedValue(6);
-    prisma.article.findMany.mockResolvedValue(makeArticles(1n, 1));
-    prisma.article.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.$executeRaw.mockResolvedValueOnce(1);
 
     await expect(scheduler.cleanupOldArticles()).resolves.toBe(1);
 
-    expect(prisma.article.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      skip: 5,
-      take: 1,
-    }));
+    expect(prisma.$executeRaw.mock.calls[0]).toContain(5);
   });
 
-  it('不刪除仍被 NotificationLog 引用的文章', async () => {
+  it('SQL 排除仍被通知引用或 active subscription 需要的文章', async () => {
     prisma.feed.findMany
       .mockResolvedValueOnce([{ id: 7n }])
       .mockResolvedValueOnce([]);
-    prisma.article.count.mockResolvedValue(3);
-    prisma.article.findMany.mockResolvedValue([{
-      ...makeArticles(3n, 1)[0],
-      notifications: [{ id: 9n }],
-    }]);
+    prisma.$executeRaw.mockResolvedValueOnce(0);
 
     await expect(scheduler.cleanupOldArticles()).resolves.toBe(0);
 
-    expect(prisma.article.deleteMany).not.toHaveBeenCalled();
+    const query = prisma.$executeRaw.mock.calls[0][0].join('');
+    expect(query).toContain('notification_logs');
+    expect(query).toContain('subscription_status_history');
+    expect(query).toContain("subscription.status = 'ACTIVE'");
   });
 
-  it('不刪除仍被啟用中訂閱通知流程需要的文章', async () => {
-    const activeSince = new Date('2026-10-02T00:00:00Z');
-    prisma.feed.findMany
-      .mockResolvedValueOnce([{ id: 7n }])
-      .mockResolvedValueOnce([]);
-    prisma.article.count.mockResolvedValue(3);
-    prisma.subscription.findMany.mockResolvedValue([{
-      createdAt: activeSince,
-      statusHistory: [{ createdAt: activeSince }],
-    }]);
-    prisma.article.findMany.mockResolvedValue([makeArticles(
-      3n,
-      1,
-      new Date('2026-10-03T00:00:00Z'),
-    )[0]]);
-
-    await expect(scheduler.cleanupOldArticles()).resolves.toBe(0);
-
-    expect(prisma.article.deleteMany).not.toHaveBeenCalled();
-  });
-
-  it('單一 Feed 清理失敗時仍繼續清理其他 Feed', async () => {
+  it('Feed 以有限批次載入並共用一次清理查詢', async () => {
     prisma.feed.findMany
       .mockResolvedValueOnce([{ id: 7n }, { id: 8n }])
       .mockResolvedValueOnce([]);
-    prisma.article.count.mockImplementation(async ({ where }: { where: { feedId: bigint } }) => {
-      const feedId = where.feedId;
-      if (feedId === 7n) {
-        throw new Error('database unavailable');
-      }
-      return 6;
-    });
-    prisma.article.findMany.mockResolvedValue(makeArticles(1n, 4));
-    prisma.article.deleteMany.mockResolvedValue({ count: 4 });
+    prisma.$executeRaw.mockResolvedValueOnce(4);
 
     await expect(scheduler.cleanupOldArticles()).resolves.toBe(4);
 
-    expect(prisma.article.count).toHaveBeenCalledTimes(2);
-    expect(prisma.article.count.mock.calls[1][0]).toEqual({ where: { feedId: 8n } });
+    expect(prisma.feed.findMany).toHaveBeenCalledTimes(2);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw.mock.calls[0]).toEqual([
+      expect.any(Array), 0n, 8n, 2,
+    ]);
     expect(schedulerLogger.append).toHaveBeenCalledWith(expect.objectContaining({
       schedulerName: 'ArticleCleanupScheduler',
+      status: 'success',
+      deletedCount: 4,
+    }));
+  });
+
+  it('批次清理失敗時逐 Feed fallback，單一失敗不阻止其他 Feed', async () => {
+    prisma.feed.findMany
+      .mockResolvedValueOnce([{ id: 7n }, { id: 8n }])
+      .mockResolvedValueOnce([]);
+    prisma.$executeRaw
+      .mockRejectedValueOnce(new Error('batch unavailable'))
+      .mockResolvedValueOnce(4)
+      .mockRejectedValueOnce(new Error('feed unavailable'));
+
+    await expect(scheduler.cleanupOldArticles()).resolves.toBe(4);
+
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(3);
+    expect(prisma.$executeRaw.mock.calls.map((call) => call.slice(1))).toEqual([
+      [0n, 8n, 2],
+      [0n, 7n, 2],
+      [7n, 8n, 2],
+    ]);
+    expect(schedulerLogger.append).toHaveBeenCalledWith(expect.objectContaining({
       status: 'success',
       deletedCount: 4,
     }));

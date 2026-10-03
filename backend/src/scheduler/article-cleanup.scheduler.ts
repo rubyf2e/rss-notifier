@@ -45,75 +45,28 @@ export class ArticleCleanupScheduler {
           break;
         }
 
-        for (const feed of feeds) {
-          try {
-            const articleCount = await this.prisma.article.count({
-              where: { feedId: feed.id },
-            });
-            let articlesToScan = articleCount - retentionLimit;
-            if (articlesToScan <= 0) {
-              continue;
+        try {
+          deletedCount += await this.deleteOldArticles(
+            cursor,
+            feeds[feeds.length - 1].id,
+            retentionLimit,
+          );
+        } catch {
+          let feedCursor = cursor;
+          for (const feed of feeds) {
+            try {
+              deletedCount += await this.deleteOldArticles(
+                feedCursor,
+                feed.id,
+                retentionLimit,
+              );
+            } catch (feedError) {
+              const message = feedError instanceof Error
+                ? feedError.message
+                : String(feedError);
+              this.logger.warn(`Feed ${feed.id} Article 清理失敗：${message}`);
             }
-
-            const subscriptions = await this.prisma.subscription.findMany({
-              where: { feedId: feed.id, status: 'ACTIVE' },
-              select: {
-                createdAt: true,
-                statusHistory: {
-                  where: { status: 'ACTIVE' },
-                  orderBy: { createdAt: 'desc' },
-                  take: 1,
-                  select: { createdAt: true },
-                },
-              },
-            });
-            const activeSinceDates = subscriptions.map(
-              (subscription) => subscription.statusHistory[0]?.createdAt ?? subscription.createdAt,
-            );
-            let scannedSurvivors = 0;
-
-            while (articlesToScan > 0) {
-              const articles = await this.prisma.article.findMany({
-                where: { feedId: feed.id },
-                orderBy: [
-                  { publishedAt: { sort: 'desc', nulls: 'last' } },
-                  { firstSeenAt: 'desc' },
-                  { id: 'desc' },
-                ],
-                skip: retentionLimit + scannedSurvivors,
-                take: Math.min(BATCH_SIZE, articlesToScan),
-                select: {
-                  id: true,
-                  firstSeenAt: true,
-                  notifications: { take: 1, select: { id: true } },
-                },
-              });
-              if (articles.length === 0) {
-                break;
-              }
-
-              const deletableIds = articles
-                .filter((article) =>
-                  article.notifications.length === 0 &&
-                  !activeSinceDates.some((activeSince) => article.firstSeenAt > activeSince),
-                )
-                .map((article) => article.id);
-              const result = deletableIds.length === 0
-                ? { count: 0 }
-                : await this.prisma.article.deleteMany({
-                  where: {
-                    id: { in: deletableIds },
-                    notifications: { none: {} },
-                  },
-                });
-
-              deletedCount += result.count;
-              scannedSurvivors += articles.length - result.count;
-              articlesToScan -= articles.length;
-            }
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            this.logger.warn(`Feed ${feed.id} Article 清理失敗：${message}`);
+            feedCursor = feed.id;
           }
         }
 
@@ -147,6 +100,48 @@ export class ArticleCleanupScheduler {
       });
       throw error;
     }
+  }
+
+  private deleteOldArticles(cursor: bigint, lastFeedId: bigint, retentionLimit: number) {
+    return this.prisma.$executeRaw`
+      WITH ranked_articles AS (
+        SELECT
+          article.id,
+          article.feed_id,
+          article.first_seen_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY article.feed_id
+            ORDER BY article.published_at DESC NULLS LAST,
+              article.first_seen_at DESC,
+              article.id DESC
+          ) AS article_rank
+        FROM articles AS article
+        WHERE article.feed_id > ${cursor}
+          AND article.feed_id <= ${lastFeedId}
+      )
+      DELETE FROM articles AS article
+      USING ranked_articles
+      WHERE article.id = ranked_articles.id
+        AND ranked_articles.article_rank > ${retentionLimit}
+        AND NOT EXISTS (
+          SELECT 1 FROM notification_logs AS notification
+          WHERE notification.article_id = article.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM subscriptions AS subscription
+          WHERE subscription.feed_id = article.feed_id
+            AND subscription.status = 'ACTIVE'
+            AND article.first_seen_at > COALESCE(
+              (
+                SELECT MAX(history.created_at)
+                FROM subscription_status_history AS history
+                WHERE history.subscription_id = subscription.id
+                  AND history.status = 'ACTIVE'
+              ),
+              subscription.created_at
+            )
+        )
+    `;
   }
 
   private async appendRunLog(entry: SchedulerRunLog): Promise<void> {

@@ -39,7 +39,13 @@ describe('NotificationService', () => {
   beforeEach(async () => {
     prisma = {
       subscription: { findMany: jest.fn().mockResolvedValue([subscription]) },
-      article: { findMany: jest.fn().mockResolvedValue([{ id: 12n }]) },
+      article: {
+        findMany: jest.fn().mockResolvedValue([{
+          id: 12n,
+          feedId: 9n,
+          firstSeenAt: new Date('2026-10-03T00:00:00.000Z'),
+        }]),
+      },
       notificationLog: {
         createMany: jest.fn().mockResolvedValue({ count: 1 }),
         findMany: jest.fn().mockResolvedValue([pendingLog]),
@@ -67,9 +73,12 @@ describe('NotificationService', () => {
       where: { status: 'ACTIVE' },
       include: { statusHistory: { orderBy: { createdAt: 'desc' } } },
     });
+    expect(prisma.article.findMany).toHaveBeenCalledTimes(1);
     expect(prisma.article.findMany).toHaveBeenCalledWith({
-      where: { feedId: 9n, firstSeenAt: { gt: activeSince } },
-      select: { id: true },
+      where: {
+        OR: [{ feedId: 9n, firstSeenAt: { gt: activeSince } }],
+      },
+      select: { id: true, feedId: true, firstSeenAt: true },
     });
     expect(prisma.notificationLog.createMany).toHaveBeenCalledWith({
       data: [{ subscriptionId: 7n, articleId: 12n, status: 'PENDING' }],
@@ -100,23 +109,71 @@ describe('NotificationService', () => {
     };
     prisma.subscription.findMany.mockResolvedValue([resumedSubscription]);
     prisma.article.findMany.mockResolvedValue([]);
-    prisma.notificationLog.findMany.mockResolvedValue([{
-      ...pendingLog,
-      subscription: resumedSubscription,
-      article: { id: 12n, firstSeenAt: new Date('2026-10-03T08:00:00.000Z') },
-    }]);
+    prisma.notificationLog.findMany.mockResolvedValue([
+      {
+        ...pendingLog,
+        subscription: resumedSubscription,
+        article: { id: 12n, firstSeenAt: new Date('2026-10-03T08:00:00.000Z') },
+      },
+      {
+        ...pendingLog,
+        id: 45n,
+        subscription: resumedSubscription,
+        article: { id: 13n, firstSeenAt: new Date('2026-10-03T09:00:00.000Z') },
+      },
+    ]);
 
     await service.enqueuePendingNotifications();
 
     expect(prisma.article.findMany).toHaveBeenCalledWith({
-      where: { feedId: 9n, firstSeenAt: { gt: resumedAt } },
-      select: { id: true },
+      where: {
+        OR: [{ feedId: 9n, firstSeenAt: { gt: resumedAt } }],
+      },
+      select: { id: true, feedId: true, firstSeenAt: true },
     });
-    expect(prisma.notificationLog.updateMany).toHaveBeenCalledWith({
-      where: { id: 44n, status: 'PENDING' },
+    expect(prisma.notificationLog.updateMany).toHaveBeenNthCalledWith(2, {
+      where: { id: { in: [44n, 45n] }, status: 'PENDING' },
       data: { status: 'SKIPPED', nextRetryAt: null },
     });
     expect(mailQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('以單次文章查詢與批次建立配對各訂閱通知，不跨越各自啟用時間', async () => {
+    const laterActiveSince = new Date('2026-10-03T00:00:00.000Z');
+    prisma.subscription.findMany.mockResolvedValue([
+      subscription,
+      {
+        ...subscription,
+        id: 8n,
+        statusHistory: [{ status: 'ACTIVE', createdAt: laterActiveSince }],
+      },
+    ]);
+    prisma.article.findMany.mockResolvedValue([
+      {
+        id: 12n,
+        feedId: 9n,
+        firstSeenAt: new Date('2026-10-02T12:00:00.000Z'),
+      },
+      {
+        id: 13n,
+        feedId: 9n,
+        firstSeenAt: new Date('2026-10-03T12:00:00.000Z'),
+      },
+    ]);
+    prisma.notificationLog.createMany.mockResolvedValue({ count: 3 });
+
+    await service.enqueuePendingNotifications();
+
+    expect(prisma.article.findMany).toHaveBeenCalledTimes(1);
+    expect(prisma.notificationLog.createMany).toHaveBeenCalledTimes(1);
+    expect(prisma.notificationLog.createMany).toHaveBeenCalledWith({
+      data: [
+        { subscriptionId: 7n, articleId: 12n, status: 'PENDING' },
+        { subscriptionId: 7n, articleId: 13n, status: 'PENDING' },
+        { subscriptionId: 8n, articleId: 13n, status: 'PENDING' },
+      ],
+      skipDuplicates: true,
+    });
   });
 
   it('Queue 暫時不可用時保留資料庫 pending log 供下次排程重試 enqueue', async () => {

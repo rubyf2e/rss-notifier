@@ -32,33 +32,40 @@ export class NotificationService {
       where: { status: 'ACTIVE' },
       include: { statusHistory: { orderBy: { createdAt: 'desc' } } },
     });
-    let created = 0;
-
-    for (const subscription of subscriptions) {
-      const activeSince = subscription.statusHistory.find((entry) => entry.status === 'ACTIVE')
-        ?.createdAt ?? subscription.createdAt;
-      const articles = await this.prisma.article.findMany({
+    const activeSubscriptions = subscriptions.map((subscription) => ({
+      subscription,
+      activeSince: subscription.statusHistory.find((entry) => entry.status === 'ACTIVE')
+        ?.createdAt ?? subscription.createdAt,
+    }));
+    const articles = activeSubscriptions.length === 0
+      ? []
+      : await this.prisma.article.findMany({
         where: {
-          feedId: subscription.feedId,
-          firstSeenAt: { gt: activeSince },
+          OR: activeSubscriptions.map(({ subscription, activeSince }) => ({
+            feedId: subscription.feedId,
+            firstSeenAt: { gt: activeSince },
+          })),
         },
-        select: { id: true },
+        select: { id: true, feedId: true, firstSeenAt: true },
       });
-
-      if (articles.length === 0) {
-        continue;
-      }
-
-      const result = await this.prisma.notificationLog.createMany({
-        data: articles.map((article) => ({
+    const notificationsToCreate = activeSubscriptions.flatMap(({ subscription, activeSince }) =>
+      articles
+        .filter((article) =>
+          article.feedId === subscription.feedId && article.firstSeenAt > activeSince,
+        )
+        .map((article) => ({
           subscriptionId: subscription.id,
           articleId: article.id,
           status: 'PENDING',
         })),
+    );
+    const creationResult = notificationsToCreate.length === 0
+      ? { count: 0 }
+      : await this.prisma.notificationLog.createMany({
+        data: notificationsToCreate,
         skipDuplicates: true,
       });
-      created += result.count;
-    }
+    const created = creationResult.count;
 
     const pendingLogs = await this.prisma.notificationLog.findMany({
       where: {
@@ -73,7 +80,8 @@ export class NotificationService {
       },
       orderBy: { createdAt: 'asc' },
     });
-    let queued = 0;
+    const skippedLogIds: bigint[] = [];
+    const logsToQueue = [];
 
     for (const log of pendingLogs) {
       const activeSince = log.subscription.statusHistory.find(
@@ -83,12 +91,22 @@ export class NotificationService {
         log.subscription.status !== 'ACTIVE' ||
         log.article.firstSeenAt <= activeSince
       ) {
-        await this.prisma.notificationLog.updateMany({
-          where: { id: log.id, status: 'PENDING' },
-          data: { status: 'SKIPPED', nextRetryAt: null },
-        });
+        skippedLogIds.push(log.id);
         continue;
       }
+
+      logsToQueue.push(log);
+    }
+
+    if (skippedLogIds.length > 0) {
+      await this.prisma.notificationLog.updateMany({
+        where: { id: { in: skippedLogIds }, status: 'PENDING' },
+        data: { status: 'SKIPPED', nextRetryAt: null },
+      });
+    }
+
+    let queued = 0;
+    for (const log of logsToQueue) {
 
       try {
         await this.mailQueue.add(
