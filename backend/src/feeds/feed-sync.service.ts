@@ -1,6 +1,22 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FeedFetcherService } from './feed-fetcher.service';
+
+export interface FeedSyncSummary {
+  feeds: number;
+  succeeded: number;
+  failed: number;
+  newArticles: number;
+  feedFailures: Array<{ feedId: string; errorType: string; durationMs: number }>;
+  recoveredFeeds: Array<{ feedId: string; durationMs: number }>;
+}
+
+function classifyError(error: unknown): string {
+  if (error instanceof BadRequestException) {
+    return 'BadRequestException';
+  }
+  return error instanceof Error ? 'Error' : 'Unknown';
+}
 
 @Injectable()
 export class FeedSyncService {
@@ -11,7 +27,7 @@ export class FeedSyncService {
     private readonly feedFetcher: FeedFetcherService,
   ) {}
 
-  async syncSubscribedFeeds(): Promise<{ succeeded: number; failed: number }> {
+  async syncSubscribedFeeds(): Promise<FeedSyncSummary> {
     const feeds = await this.prisma.feed.findMany({
       where: { subscriptions: { some: {} } },
       select: {
@@ -19,21 +35,27 @@ export class FeedSyncService {
         url: true,
         initialSyncCompleted: true,
         createdAt: true,
+        status: true,
       },
       orderBy: { id: 'asc' },
     });
     let succeeded = 0;
     let failed = 0;
+    let newArticles = 0;
+    const feedFailures: FeedSyncSummary['feedFailures'] = [];
+    const recoveredFeeds: FeedSyncSummary['recoveredFeeds'] = [];
 
     for (const feed of feeds) {
+      const startedAt = Date.now();
       try {
         const parsedFeed = await this.feedFetcher.fetchAndParse(feed.url);
         const syncedAt = new Date();
         const firstSeenAt = feed.initialSyncCompleted ? syncedAt : feed.createdAt;
 
-        await this.prisma.$transaction(async (transaction) => {
+        const insertedCount = await this.prisma.$transaction(async (transaction) => {
+          let count = 0;
           if (parsedFeed.items.length > 0) {
-            await transaction.article.createMany({
+            const result = await transaction.article.createMany({
               data: parsedFeed.items.map((article) => ({
                 feedId: feed.id,
                 guid: article.guid,
@@ -45,6 +67,7 @@ export class FeedSyncService {
               })),
               skipDuplicates: true,
             });
+            count = result.count;
           }
 
           await transaction.feed.update({
@@ -60,10 +83,23 @@ export class FeedSyncService {
               status: 'HEALTHY',
             },
           });
+          return count;
         });
+        newArticles += insertedCount;
         succeeded += 1;
+        if (feed.status === 'ERROR') {
+          recoveredFeeds.push({
+            feedId: String(feed.id),
+            durationMs: Date.now() - startedAt,
+          });
+        }
       } catch (error) {
         failed += 1;
+        feedFailures.push({
+          feedId: String(feed.id),
+          errorType: classifyError(error),
+          durationMs: Date.now() - startedAt,
+        });
         const message = (error instanceof Error ? error.message : String(error)).slice(0, 2000);
         try {
           await this.prisma.feed.update({
@@ -75,14 +111,20 @@ export class FeedSyncService {
             },
           });
         } catch (updateError) {
-          const updateMessage = updateError instanceof Error
-            ? updateError.message
-            : String(updateError);
-          this.logger.error(`無法更新 Feed ${feed.id} 的錯誤狀態：${updateMessage}`);
+          this.logger.error(
+            `無法更新 Feed ${feed.id} 的錯誤狀態 errorType=${classifyError(updateError)}`,
+          );
         }
       }
     }
 
-    return { succeeded, failed };
+    return {
+      feeds: feeds.length,
+      succeeded,
+      failed,
+      newArticles,
+      feedFailures,
+      recoveredFeeds,
+    };
   }
 }

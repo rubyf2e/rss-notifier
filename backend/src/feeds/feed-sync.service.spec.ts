@@ -24,12 +24,14 @@ describe('FeedSyncService', () => {
       url: 'https://broken.example/feed.xml',
       initialSyncCompleted: true,
       createdAt: new Date('2026-10-01T00:00:00.000Z'),
+      status: 'HEALTHY',
     },
     {
       id: 2n,
       url: 'https://healthy.example/feed.xml',
       initialSyncCompleted: false,
       createdAt: new Date('2026-10-01T00:00:00.000Z'),
+      status: 'HEALTHY',
     },
   ];
 
@@ -71,7 +73,19 @@ describe('FeedSyncService', () => {
   });
 
   it('逐一同步 Feed；單一錯誤留下狀態但不阻止其他 Feed，初次同步只建立基準', async () => {
-    await expect(service.syncSubscribedFeeds()).resolves.toEqual({ succeeded: 1, failed: 1 });
+    const summary = await service.syncSubscribedFeeds();
+    expect(summary).toEqual({
+      feeds: 2,
+      succeeded: 1,
+      failed: 1,
+      newArticles: 1,
+      feedFailures: [{
+        feedId: '1',
+        errorType: 'Error',
+        durationMs: expect.any(Number),
+      }],
+      recoveredFeeds: [],
+    });
 
     expect(prisma.feed.findMany).toHaveBeenCalledWith({
       where: { subscriptions: { some: {} } },
@@ -80,6 +94,7 @@ describe('FeedSyncService', () => {
         url: true,
         initialSyncCompleted: true,
         createdAt: true,
+        status: true,
       },
       orderBy: { id: 'asc' },
     });
@@ -120,5 +135,26 @@ describe('FeedSyncService', () => {
 
     expect(transaction.article.createMany).toHaveBeenCalledTimes(1);
     expect(transaction.article.createMany.mock.calls[0][0].skipDuplicates).toBe(true);
+  });
+
+  it('成功同步原本錯誤的 Feed 時回傳復原事件', async () => {
+    const failedFeed = { ...subscribedFeeds[1], status: 'ERROR' };
+    prisma.feed.findMany.mockResolvedValue([failedFeed]);
+    feedFetcher.fetchAndParse.mockReset().mockResolvedValue({
+      url: failedFeed.url,
+      title: 'Recovered Feed',
+      description: null,
+      siteUrl: null,
+      items: [],
+    });
+
+    await expect(service.syncSubscribedFeeds()).resolves.toEqual({
+      feeds: 1,
+      succeeded: 1,
+      failed: 0,
+      newArticles: 0,
+      feedFailures: [],
+      recoveredFeeds: [{ feedId: '2', durationMs: expect.any(Number) }],
+    });
   });
 });

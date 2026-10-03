@@ -1,0 +1,153 @@
+請依 `.github/copilot-instructions.md` 執行。
+
+本次只修改：
+
+```text
+backend/src/scheduler/feed-sync.scheduler.ts
+```
+
+以及完成 `FeedSyncScheduler` logging 所**必要且直接相關**的既有 Logger 呼叫；不要修改其他 Scheduler、Queue、Mail、Frontend、Prisma、API 或 dependency。
+
+## 目標
+
+完善 `FeedSyncScheduler` 的 observability logging。
+
+Logging 只能記錄執行狀態，**不得改變既有 Feed Sync business logic、DB 行為、Article / Notification dedup、錯誤處理或 Scheduler 頻率。**
+
+請先閱讀：
+
+- `FeedSyncScheduler`
+- `FeedSyncService`
+- `PersistentSchedulerLogger`
+- 目前相關 tests
+
+優先沿用現有 `PersistentSchedulerLogger` 與既有 error classification。
+
+## Logging
+
+### 開始
+
+每次實際執行同步時：
+
+```text
+INFO [FeedSyncScheduler] START executionId=...
+```
+
+### Skip
+
+如果目前同步間隔尚未到：
+
+```text
+INFO [FeedSyncScheduler] SKIP reason=INTERVAL_NOT_REACHED elapsedMs=...
+```
+
+不要執行 Feed Sync。
+
+### 成功
+
+整次同步完成：
+
+```text
+INFO [FeedSyncScheduler] SUCCESS executionId=... durationMs=... feeds=... succeeded=... failed=... newArticles=... notificationsCreated=...
+```
+
+使用 aggregate summary。
+
+不要逐 Article / Notification 寫 INFO log。
+
+### 單一 Feed 失敗
+
+單一 Feed 發生錯誤：
+
+```text
+WARN [FeedSyncScheduler] FEED_FAILED executionId=... feedId=... errorType=... durationMs=...
+```
+
+要求：
+
+- 保持目前「單一 Feed 失敗不影響其他 Feed」的行為
+- 不因 logging 改變 exception flow
+- 使用既有 error classification
+- 不記錄完整 Feed URL、response body、XML / HTML
+
+### Feed Recovery
+
+如果目前程式已有可判斷 Feed 從失敗恢復的資訊，才記錄：
+
+```text
+INFO [FeedSyncScheduler] FEED_RECOVERED executionId=... feedId=... durationMs=...
+```
+
+不要為了產生 recovery log 而新增 DB 欄位、migration 或額外狀態機制。
+
+### 未預期 Exception
+
+整個 scheduler 發生未預期 exception：
+
+```text
+ERROR [FeedSyncScheduler] FAILED executionId=... durationMs=... errorType=...
+```
+
+要求：
+
+- 不 swallow exception
+- 保持目前 exception propagation
+- 不改變既有 retry / error semantics
+- logging 發生錯誤時不得覆蓋原始 business exception
+
+## Sensitive Data
+
+禁止寫入：
+
+- password
+- magic link token / URL
+- JWT / access token / refresh token
+- Authorization header / Cookie
+- SMTP credentials
+- DATABASE_URL / REDIS_URL
+- 完整 Feed URL
+- response body
+- XML / HTML
+
+Error message 若可能包含敏感資料，使用既有 sanitize / classification 機制。
+
+## 修改限制
+
+不要：
+
+- 修改 `FeedSyncService`
+- 修改其他 Scheduler
+- 修改 Queue / Processor
+- 修改 Mail
+- 修改 Prisma / migration
+- 修改 API
+- 修改 Cron frequency
+- 新增 dependency
+- 建立新的 Logger abstraction
+- 重構無關程式
+
+## Validation
+
+完成後執行：
+
+```bash
+docker compose exec backend npm run lint
+docker compose exec backend npm test
+docker compose exec backend npm run build
+```
+
+並確認測試涵蓋：
+
+- START
+- INTERVAL_NOT_REACHED → SKIP
+- 正常完成 → SUCCESS summary
+- 單一 Feed 失敗 → FEED_FAILED，其他 Feed 繼續
+- unexpected exception → FAILED
+- log 不包含敏感資料
+
+最後簡潔回報：
+
+1. 修改檔案
+2. Logging 行為
+3. 測試 / lint / build 結果
+4. 是否有任何既有架構限制
