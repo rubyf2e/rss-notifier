@@ -11,7 +11,7 @@ describe('訂閱服務', () => {
   let service: SubscriptionsService;
   let prisma: {
     user: { findUnique: jest.Mock };
-    subscription: { findMany: jest.Mock };
+    subscription: { findMany: jest.Mock; count: jest.Mock };
     $transaction: jest.Mock;
   };
   let transaction: {
@@ -71,7 +71,10 @@ describe('訂閱服務', () => {
     };
     prisma = {
       user: { findUnique: jest.fn().mockResolvedValue({ id: 42n }) },
-      subscription: { findMany: jest.fn().mockResolvedValue([subscription]) },
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([subscription]),
+        count: jest.fn().mockResolvedValue(23),
+      },
       $transaction: jest.fn((callback: (tx: typeof transaction) => unknown) =>
         callback(transaction),
       ),
@@ -143,15 +146,73 @@ describe('訂閱服務', () => {
     );
   });
 
-  it('清單查詢只包含目前使用者並可安全序列化', async () => {
-    const result = await service.list('user-a');
+  it('清單查詢只包含目前使用者、維持排序並回傳預設分頁資料', async () => {
+    const result = await service.list('user-a', 1, 20);
 
     expect(prisma.subscription.findMany).toHaveBeenCalledWith({
       where: { userId: 42n },
       include: { feed: true },
       orderBy: { createdAt: 'desc' },
+      skip: 0,
+      take: 20,
+    });
+    expect(prisma.subscription.count).toHaveBeenCalledWith({
+      where: { userId: 42n },
+    });
+    expect(result).toEqual({
+      items: [{
+        id: subscription.publicId,
+        status: subscription.status,
+        createdAt: subscription.createdAt,
+        feed: {
+          title: feed.title,
+          url: feed.url,
+          status: feed.status,
+          lastSyncedAt: feed.lastSyncedAt,
+          lastError: feed.lastError,
+        },
+      }],
+      page: 1,
+      limit: 20,
+      total: 23,
+      totalPages: 2,
     });
     expect(() => JSON.stringify(result)).not.toThrow();
+  });
+
+  it('依指定 page 與 limit 使用資料庫分頁並計算 metadata', async () => {
+    prisma.subscription.findMany.mockResolvedValue([]);
+    prisma.subscription.count.mockResolvedValue(11);
+
+    const result = await service.list('user-a', 3, 5);
+
+    expect(prisma.subscription.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: 42n },
+      skip: 10,
+      take: 5,
+    }));
+    expect(result).toEqual({
+      items: [],
+      page: 3,
+      limit: 5,
+      total: 11,
+      totalPages: 3,
+    });
+  });
+
+  it('超過最後一頁時回傳空 items 並保留資料庫總數', async () => {
+    prisma.subscription.findMany.mockResolvedValue([]);
+    prisma.subscription.count.mockResolvedValue(11);
+
+    const result = await service.list('user-a', 4, 5);
+
+    expect(result).toEqual({
+      items: [],
+      page: 4,
+      limit: 5,
+      total: 11,
+      totalPages: 3,
+    });
   });
 
   it('暫停狀態變更限定在使用者自己的訂閱並記錄歷程', async () => {

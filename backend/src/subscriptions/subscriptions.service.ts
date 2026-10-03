@@ -86,15 +86,27 @@ export class SubscriptionsService {
     }
   }
 
-  async list(userPublicId: string) {
+  async list(userPublicId: string, page: number, limit: number) {
     const userId = await this.getUserId(userPublicId);
-    const subscriptions = await this.prisma.subscription.findMany({
-      where: { userId },
-      include: { feed: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const where = { userId };
+    const [subscriptions, total] = await Promise.all([
+      this.prisma.subscription.findMany({
+        where,
+        include: { feed: true },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.subscription.count({ where }),
+    ]);
 
-    return subscriptions.map((subscription) => this.toResponse(subscription));
+    return {
+      items: subscriptions.map((subscription) => this.toResponse(subscription)),
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async pause(userPublicId: string, subscriptionPublicId: string) {

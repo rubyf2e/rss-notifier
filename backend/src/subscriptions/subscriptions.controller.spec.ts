@@ -60,14 +60,79 @@ describe('訂閱 API 控制器', () => {
   });
 
   it('以 JWT 身分讀取訂閱清單', async () => {
+    subscriptionsService.list.mockResolvedValue({
+      items: [],
+      page: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 0,
+    });
+
     await request(app.getHttpServer())
       .get('/subscriptions')
       .set('Authorization', 'Bearer access-token')
       .expect(200)
-      .expect([]);
+      .expect({ items: [], page: 1, limit: 20, total: 0, totalPages: 0 });
 
     expect(jwtService.verifyAsync).toHaveBeenCalledWith('access-token');
-    expect(subscriptionsService.list).toHaveBeenCalledWith('user-public-id');
+    expect(subscriptionsService.list).toHaveBeenCalledWith('user-public-id', 1, 20);
+  });
+
+  it('將指定 page 與 limit 傳給登入者的清單查詢', async () => {
+    subscriptionsService.list.mockResolvedValue({
+      items: [],
+      page: 2,
+      limit: 7,
+      total: 0,
+      totalPages: 0,
+    });
+
+    await request(app.getHttpServer())
+      .get('/subscriptions?page=2&limit=7')
+      .set('Authorization', 'Bearer access-token')
+      .expect(200)
+      .expect({ items: [], page: 2, limit: 7, total: 0, totalPages: 0 });
+
+    expect(subscriptionsService.list).toHaveBeenCalledWith('user-public-id', 2, 7);
+  });
+
+  it('拒絕超過 limit 上限與非法 page 或 limit', async () => {
+    const authorization = 'Bearer access-token';
+
+    for (const query of [
+      '?limit=101',
+      '?limit=0',
+      '?limit=1.5',
+      '?limit=invalid',
+      '?page=0',
+      '?page=-1',
+      '?page=1.5',
+      '?page=invalid',
+    ]) {
+      await request(app.getHttpServer())
+        .get(`/subscriptions${query}`)
+        .set('Authorization', authorization)
+        .expect(400);
+    }
+
+    expect(subscriptionsService.list).not.toHaveBeenCalled();
+  });
+
+  it('允許 limit 上限 100', async () => {
+    subscriptionsService.list.mockResolvedValue({
+      items: [],
+      page: 1,
+      limit: 100,
+      total: 0,
+      totalPages: 0,
+    });
+
+    await request(app.getHttpServer())
+      .get('/subscriptions?limit=100')
+      .set('Authorization', 'Bearer access-token')
+      .expect(200);
+
+    expect(subscriptionsService.list).toHaveBeenCalledWith('user-public-id', 1, 100);
   });
 
   it('驗證新增訂閱的 URL DTO 並將登入者傳給 service', async () => {

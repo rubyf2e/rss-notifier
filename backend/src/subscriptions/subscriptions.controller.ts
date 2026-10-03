@@ -16,6 +16,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import type { AuthenticatedRequest } from '../auth/jwt-auth.guard';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { ListSubscriptionsDto } from './dto/list-subscriptions.dto';
 import { UnsubscribeDto } from './dto/unsubscribe.dto';
 import { SubscriptionsService } from './subscriptions.service';
 
@@ -34,8 +35,15 @@ export class SubscriptionsController {
 
   @Get()
   @UseGuards(JwtAuthGuard)
-  list(@Req() request: AuthenticatedRequest) {
-    return this.subscriptionsService.list(request.user.userId);
+  list(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: ListSubscriptionsDto,
+  ) {
+    return this.subscriptionsService.list(
+      request.user.userId,
+      query.page,
+      query.limit,
+    );
   }
 
   @Patch(':publicId/pause')

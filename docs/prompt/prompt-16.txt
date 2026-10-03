@@ -1,0 +1,57 @@
+依 `copilot-instructions.md` 執行。
+
+本次只修改 **Backend**，不要修改或分析 Frontend。
+
+將目前訂閱清單改為 **Backend server-side pagination**，以支援大量訂閱資料。
+
+### Requirements
+
+- 找出目前 `GET /subscriptions` 的 Controller / DTO / Service / Prisma query / tests。
+- 分頁由 Backend 執行，禁止先查出全部訂閱後再於記憶體分頁。
+- 使用 Prisma 的 `skip` / `take` 或現有專案等價方式。
+- 支援 `page`、`limit` query parameters。
+- `page` 預設 `1`。
+- `limit` 使用合理預設值與上限，避免單次查詢過大。
+- 回應需包含訂閱資料與 pagination metadata，例如：
+  - `items`
+  - `page`
+  - `limit`
+  - `total`
+  - `totalPages`
+- `total` 使用 DB count，不依賴查詢結果筆數。
+- 保持目前 API 的認證、授權、排序、filter 與 response data contract；除 pagination 外不要改變既有行為。
+- API query validation 使用現有 DTO / `class-validator` 機制。
+- 不修改 Prisma schema，除非現有實作確實無法完成需求。
+- 不新增 package。
+- 不修改 Frontend。
+- 不建立新的 pagination abstraction，除非現有架構已有相同模式可重用。
+
+### Tests
+
+補充或更新 Backend tests，至少覆蓋：
+
+- 預設 page / limit
+- 指定 page / limit
+- `total` / `totalPages`
+- 超過最後一頁
+- limit 上限
+- page / limit 非法輸入
+- 既有 user isolation / sorting / filtering 行為不受影響
+
+### Validation
+
+在 Docker Backend container 執行相關：
+
+```bash
+docker compose exec backend npm test
+docker compose exec backend npm run lint
+docker compose exec backend npm run build
+```
+
+完成後只回報：
+
+1. 修改檔案
+2. Pagination API contract
+3. Prisma query 實作
+4. Tests / validation 結果
+5. 是否有任何 API 行為變更
