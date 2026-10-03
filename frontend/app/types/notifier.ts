@@ -2,19 +2,26 @@ export type SubscriptionStatus = "ACTIVE" | "PAUSED";
 export type FeedHealthStatus = "HEALTHY" | "ERROR";
 
 export interface FeedResponse {
-  publicId: string;
   title: string;
   url: string;
   status: FeedHealthStatus;
   lastSyncedAt: string | null;
   lastError: string | null;
-  lastErrorAt: string | null;
 }
 
 export interface SubscriptionResponse {
-  publicId: string;
+  id: string;
   status: SubscriptionStatus;
+  createdAt: string;
   feed: FeedResponse;
+}
+
+export interface PaginatedSubscriptionsResponse {
+  items: SubscriptionResponse[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }
 
 export interface DemoSession {

@@ -1,0 +1,156 @@
+依 `copilot-instructions.md` 執行。
+
+本次只修改 Frontend，將訂閱清單改為 **Element Plus Table + server-side pagination**。
+
+目前 API response：
+
+```json
+{
+  "items": [
+    {
+      "id": "b3b8dde5-53ab-4e11-b1b3-8f500898c633",
+      "status": "ACTIVE",
+      "createdAt": "2026-10-03T14:47:17.568Z",
+      "feed": {
+        "title": "RSS Test Server",
+        "url": "https://example.com/feed.xml",
+        "status": "HEALTHY",
+        "lastSyncedAt": "2026-10-03T16:08:00.614Z",
+        "lastError": null
+      }
+    }
+  ],
+  "page": 1,
+  "limit": 20,
+  "total": 1,
+  "totalPages": 1
+}
+```
+
+### 先檢查
+
+確認目前：
+
+- subscriptions page
+- subscription list component
+- API composable / `useApi`
+- subscription types
+- loading / empty / error state
+- pause / resume / delete actions
+- 目前 mock API / API response mapping
+
+先理解現有資料流，再做最小修改。
+
+### UI
+
+將目前訂閱清單改為 `el-table`：
+
+欄位至少包含：
+
+- Feed 名稱
+- Feed URL
+- Feed 狀態
+- 訂閱狀態
+- 最後同步時間
+- 最新錯誤
+- 建立時間
+- 操作
+
+操作保留目前既有功能：
+
+- Pause / Resume
+- Delete
+
+不要改既有 action 行為。
+
+使用 Element Plus 現有 component，不新增 UI library。
+
+### Pagination
+
+使用 `el-pagination`，採 **server-side pagination**。
+
+- `page` 使用 API response 的 `page`
+- `limit` 使用 API response 的 `limit`
+- `total` 使用 API response 的 `total`
+- `totalPages` 不自行重新計算
+- 預設 page size 保持 API 現有 `20`
+- 切換頁碼時重新呼叫 `GET /subscriptions?page=...&limit=...`
+- 不要一次取得全部 subscriptions 再由 Frontend `slice`
+- 不要自行實作 pagination
+
+若目前 API composable 已支援 query params，直接沿用。
+
+### State
+
+處理：
+
+- initial loading
+- pagination loading
+- empty list
+- API error
+- page change
+- pause/resume/delete 後重新載入目前頁面
+
+如果刪除目前頁最後一筆造成目前頁超出 `totalPages`：
+
+- 自動回到有效頁碼
+- 再重新載入
+- 不要出現空白或無效頁面
+
+### Data Mapping
+
+直接依目前 API response：
+
+```text
+items
+page
+limit
+total
+totalPages
+```
+
+不要改 Backend response。
+
+不要暴露或使用 database internal ID；使用 API 提供的 public `id`。
+
+日期、status、error 顯示沿用目前 Frontend 的格式化方式；若目前沒有，採最小必要實作。
+
+### Responsive
+
+桌面使用完整 table。
+
+小螢幕避免整個頁面被 table 撐破：
+
+- 使用 Element Plus table 的 horizontal scroll / responsive 能力
+- 不要另外建立第二套 mobile list UI，除非目前結構已存在且重用成本很低
+
+Pagination 在 table 下方保持可操作。
+
+### Constraints
+
+- 只修改 Frontend。
+- 不修改 Backend。
+- 不修改 API contract。
+- 不修改 Prisma / schema。
+- 不新增 package。
+- 不新增 mock server。
+- 不把 pagination 邏輯放到 Backend。
+- 不順便重構無關 component / composable。
+- 不使用 `<style>` / `<style scoped>`。
+- Tailwind 處理 layout / spacing / responsive；必要的複雜樣式放既有 SCSS。
+
+### Validation
+
+執行：
+
+```bash
+docker compose exec frontend npm run build
+```
+
+完成後只回報：
+
+1. 修改檔案
+2. Table 欄位與 pagination 實作
+3. API query params 如何傳遞
+4. 刪除最後一筆時的頁碼處理
+5. Build 結果

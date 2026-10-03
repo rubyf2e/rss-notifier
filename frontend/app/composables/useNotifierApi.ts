@@ -1,5 +1,6 @@
 import type {
   FeedResponse,
+  PaginatedSubscriptionsResponse,
   SubscriptionResponse,
   SubscriptionStatus,
   UnsubscribePreview,
@@ -7,56 +8,12 @@ import type {
 
 const DEMO_UNSUBSCRIBE_TOKEN = "demo-unsubscribe-token";
 const DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID = "sub-demo-verge";
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 20;
 
-function createSeedSubscriptions(): SubscriptionResponse[] {
-  const now = Date.now();
-
-  return [
-    {
-      publicId: DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID,
-      status: "ACTIVE",
-      feed: {
-        publicId: "feed-demo-verge",
-        title: "The Verge",
-        url: "https://www.theverge.com/rss/index.xml",
-        status: "HEALTHY",
-        lastSyncedAt: new Date(now - 12 * 60_000).toISOString(),
-        lastError: null,
-        lastErrorAt: null,
-      },
-    },
-    {
-      publicId: "sub-demo-npr",
-      status: "PAUSED",
-      feed: {
-        publicId: "feed-demo-npr",
-        title: "NPR News",
-        url: "https://feeds.npr.org/1001/rss.xml",
-        status: "HEALTHY",
-        lastSyncedAt: new Date(now - 48 * 60_000).toISOString(),
-        lastError: null,
-        lastErrorAt: null,
-      },
-    },
-    {
-      publicId: "sub-demo-ars",
-      status: "ACTIVE",
-      feed: {
-        publicId: "feed-demo-ars",
-        title: "Ars Technica",
-        url: "https://feeds.arstechnica.com/arstechnica/index",
-        status: "ERROR",
-        lastSyncedAt: new Date(now - 4 * 60 * 60_000).toISOString(),
-        lastError: "連線逾時，最近一次檢查未能取得 Feed。",
-        lastErrorAt: new Date(now - 38 * 60_000).toISOString(),
-      },
-    },
-  ];
-}
-
-function waitForMockResponse() {
-  return new Promise<void>((resolve) => setTimeout(resolve, 380));
-}
+type SubscriptionRecord = SubscriptionResponse & {
+  publicId?: string;
+};
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -66,8 +23,86 @@ function createPublicId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function serializeSubscription(
+  record: SubscriptionRecord,
+): SubscriptionResponse {
+  return {
+    id: record.id,
+    status: record.status,
+    createdAt: record.createdAt,
+    feed: {
+      title: record.feed.title,
+      url: record.feed.url,
+      status: record.feed.status,
+      lastSyncedAt: record.feed.lastSyncedAt,
+      lastError: record.feed.lastError,
+    },
+  };
+}
+
+function createSeedSubscriptions(): SubscriptionRecord[] {
+  const now = Date.now();
+  const names = [
+    "The Verge",
+    "NPR News",
+    "Ars Technica",
+    "Hacker News",
+    "Smashing Magazine",
+    "Product Hunt",
+    "Engadget",
+    "The Verge Tech",
+    "MIT Technology Review",
+    "GitHub Blog",
+    "TechCrunch",
+    "The New Stack",
+    "Reddit r/technology",
+    "Mozilla Hacks",
+    "VS Code Blog",
+    "Docker Blog",
+    "NestJS News",
+    "Vue School",
+    "OpenAI Blog",
+    "AWS News",
+    "Google Developer Blog",
+    "Microsoft Dev Blog",
+    "Apple Newsroom",
+    "Kubernetes Blog",
+    "Vercel Blog",
+    "Cloudflare Blog",
+    "Linus Tech Tips",
+  ];
+
+  return Array.from({ length: 27 }, (_, index) => {
+    const subscriptionId =
+      index === 0 ? DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID : `sub-demo-${index}`;
+    const feedTitle = names[index % names.length];
+    const isActive = index % 4 !== 0;
+    const isError = index % 5 === 0;
+    const createdAt = new Date(now - index * 3 * 60 * 60_000).toISOString();
+    const lastSyncedAt = new Date(now - index * 28 * 60_000).toISOString();
+
+    return {
+      id: subscriptionId,
+      publicId: subscriptionId,
+      status: isActive ? "ACTIVE" : "PAUSED",
+      createdAt,
+      feed: {
+        title: feedTitle,
+        url: `https://example.com/feed/${index + 1}.xml`,
+        status: isError ? "ERROR" : "HEALTHY",
+        lastSyncedAt,
+        lastError: isError ? "連線逾時，最近一次檢查未能取得 Feed。" : null,
+      },
+    };
+  });
+}
+
+function waitForMockResponse() {
+  return new Promise<void>((resolve) => setTimeout(resolve, 280));
+}
+
 export function useNotifierApi() {
-  const subscriptions = useState<SubscriptionResponse[]>(
+  const subscriptions = useState<SubscriptionRecord[]>(
     "mock-subscriptions",
     createSeedSubscriptions,
   );
@@ -81,12 +116,31 @@ export function useNotifierApi() {
     return { message: "示範模式：登入連結申請已完成。" };
   }
 
-  async function listSubscriptions() {
+  async function listSubscriptions(
+    params: { page?: number; limit?: number } = {},
+  ): Promise<PaginatedSubscriptionsResponse> {
     await waitForMockResponse();
-    return clone(subscriptions.value);
+
+    const page = Math.max(1, Number(params.page) || DEFAULT_PAGE);
+    const limit = Math.max(1, Number(params.limit) || DEFAULT_LIMIT);
+    const total = subscriptions.value.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * limit;
+    const sliced = subscriptions.value.slice(start, start + limit);
+
+    return {
+      items: sliced.map((item) => serializeSubscription(item)),
+      page: safePage,
+      limit,
+      total,
+      totalPages,
+    };
   }
 
-  async function createSubscription(url: string) {
+  async function createSubscription(
+    url: string,
+  ): Promise<SubscriptionResponse> {
     await waitForMockResponse();
 
     let parsedUrl: URL;
@@ -106,45 +160,46 @@ export function useNotifierApi() {
     }
 
     const title = parsedUrl.hostname.replace(/^www\./, "").split(".")[0];
-    const feed: FeedResponse = {
-      publicId: createPublicId("feed"),
-      title: title.charAt(0).toUpperCase() + title.slice(1),
-      url: normalizedUrl,
-      status: "HEALTHY",
-      lastSyncedAt: new Date().toISOString(),
-      lastError: null,
-      lastErrorAt: null,
-    };
-    const subscription: SubscriptionResponse = {
-      publicId: createPublicId("sub"),
+    const createdAt = new Date().toISOString();
+    const subscriptionId = createPublicId("sub");
+    const subscription: SubscriptionRecord = {
+      id: subscriptionId,
+      publicId: subscriptionId,
       status: "ACTIVE",
-      feed,
+      createdAt,
+      feed: {
+        title: title.charAt(0).toUpperCase() + title.slice(1),
+        url: normalizedUrl,
+        status: "HEALTHY",
+        lastSyncedAt: createdAt,
+        lastError: null,
+      },
     };
 
     subscriptions.value = [subscription, ...subscriptions.value];
-    return clone(subscription);
+    return serializeSubscription(subscription);
   }
 
   async function updateSubscriptionStatus(
-    publicId: string,
+    subscriptionId: string,
     status: SubscriptionStatus,
   ) {
     await waitForMockResponse();
     const subscription = subscriptions.value.find(
-      (item) => item.publicId === publicId,
+      (item) => item.id === subscriptionId || item.publicId === subscriptionId,
     );
     if (!subscription) {
       throw new Error("找不到這筆訂閱，請重新整理後再試。");
     }
 
     subscription.status = status;
-    return clone(subscription);
+    return serializeSubscription(subscription);
   }
 
-  async function deleteSubscription(publicId: string) {
+  async function deleteSubscription(subscriptionId: string) {
     await waitForMockResponse();
     const nextSubscriptions = subscriptions.value.filter(
-      (item) => item.publicId !== publicId,
+      (item) => item.id !== subscriptionId && item.publicId !== subscriptionId,
     );
     if (nextSubscriptions.length === subscriptions.value.length) {
       throw new Error("找不到這筆訂閱，請重新整理後再試。");
@@ -162,7 +217,9 @@ export function useNotifierApi() {
     }
 
     const subscription = subscriptions.value.find(
-      (item) => item.publicId === DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID,
+      (item) =>
+        item.id === DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID ||
+        item.publicId === DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID,
     );
     if (!subscription) {
       throw new Error("這筆訂閱已不存在或已取消。");
@@ -174,7 +231,9 @@ export function useNotifierApi() {
   async function unsubscribe(token: string) {
     const preview = await getUnsubscribePreview(token);
     subscriptions.value = subscriptions.value.filter(
-      (item) => item.publicId !== DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID,
+      (item) =>
+        item.id !== DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID &&
+        item.publicId !== DEMO_UNSUBSCRIBE_SUBSCRIPTION_ID,
     );
     return preview;
   }

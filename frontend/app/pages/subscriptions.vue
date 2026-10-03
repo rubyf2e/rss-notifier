@@ -5,7 +5,10 @@ import {
   type FormInstance,
   type FormRules,
 } from "element-plus";
-import type { SubscriptionResponse } from "~/types/notifier";
+import type {
+  PaginatedSubscriptionsResponse,
+  SubscriptionResponse,
+} from "~/types/notifier";
 
 definePageMeta({
   layout: "dashboard",
@@ -14,13 +17,20 @@ definePageMeta({
 
 const api = useNotifierApi();
 const subscriptions = ref<SubscriptionResponse[]>([]);
-const isLoading = ref(true);
+const isInitialLoading = ref(true);
+const isPageLoading = ref(false);
 const listError = ref("");
 const isAdding = ref(false);
 const feedUrl = ref("");
 const addError = ref("");
 const addForm = ref<FormInstance>();
 const busySubscriptionId = ref<string | null>(null);
+const pagination = reactive({
+  page: 1,
+  limit: 20,
+  total: 0,
+  totalPages: 1,
+});
 
 const feedRules: FormRules = {
   url: [
@@ -37,17 +47,58 @@ const attentionCount = computed(
     subscriptions.value.filter((item) => item.feed.status === "ERROR").length,
 );
 
-async function loadSubscriptions() {
-  isLoading.value = true;
+function applyPageResponse(response: PaginatedSubscriptionsResponse) {
+  pagination.page = response.page;
+  pagination.limit = response.limit;
+  pagination.total = response.total;
+  pagination.totalPages = response.totalPages;
+  subscriptions.value = response.items;
+}
+
+async function loadSubscriptions(
+  page = pagination.page,
+  limit = pagination.limit,
+) {
+  const isFirstLoad = isInitialLoading.value;
+  if (isFirstLoad) {
+    isInitialLoading.value = true;
+  } else {
+    isPageLoading.value = true;
+  }
   listError.value = "";
+
   try {
-    subscriptions.value = await api.listSubscriptions();
+    const response = await api.listSubscriptions({ page, limit });
+    const safePage = Math.min(response.page, Math.max(response.totalPages, 1));
+
+    if (safePage !== response.page) {
+      return loadSubscriptions(safePage, response.limit);
+    }
+
+    applyPageResponse(response);
   } catch (error) {
     listError.value =
       error instanceof Error ? error.message : "訂閱清單載入失敗。";
   } finally {
-    isLoading.value = false;
+    isInitialLoading.value = false;
+    isPageLoading.value = false;
   }
+}
+
+function handlePageChange(page: number) {
+  if (page === pagination.page) {
+    return;
+  }
+
+  void loadSubscriptions(page, pagination.limit);
+}
+
+function handlePageSizeChange(limit: number) {
+  if (limit === pagination.limit) {
+    return;
+  }
+
+  void loadSubscriptions(1, limit);
 }
 
 async function addFeed() {
@@ -62,7 +113,7 @@ async function addFeed() {
   try {
     await api.createSubscription(feedUrl.value.trim());
     feedUrl.value = "";
-    await loadSubscriptions();
+    await loadSubscriptions(pagination.page, pagination.limit);
     ElMessage.success("Feed 已加入訂閱清單。");
   } catch (error) {
     addError.value =
@@ -73,11 +124,11 @@ async function addFeed() {
 }
 
 async function toggleSubscription(subscription: SubscriptionResponse) {
-  busySubscriptionId.value = subscription.publicId;
+  busySubscriptionId.value = subscription.id;
   const nextStatus = subscription.status === "ACTIVE" ? "PAUSED" : "ACTIVE";
   try {
-    await api.updateSubscriptionStatus(subscription.publicId, nextStatus);
-    await loadSubscriptions();
+    await api.updateSubscriptionStatus(subscription.id, nextStatus);
+    await loadSubscriptions(pagination.page, pagination.limit);
     ElMessage.success(
       nextStatus === "PAUSED" ? "已暫停此訂閱。" : "已恢復此訂閱。",
     );
@@ -106,10 +157,10 @@ async function removeSubscription(subscription: SubscriptionResponse) {
     return;
   }
 
-  busySubscriptionId.value = subscription.publicId;
+  busySubscriptionId.value = subscription.id;
   try {
-    await api.deleteSubscription(subscription.publicId);
-    await loadSubscriptions();
+    await api.deleteSubscription(subscription.id);
+    await loadSubscriptions(pagination.page, pagination.limit);
     ElMessage.success("訂閱已刪除。");
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : "刪除訂閱失敗。");
@@ -126,7 +177,9 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-onMounted(loadSubscriptions);
+onMounted(() => {
+  void loadSubscriptions();
+});
 </script>
 
 <template>
@@ -143,7 +196,7 @@ onMounted(loadSubscriptions);
     <section class="overview-grid" aria-label="訂閱摘要">
       <div class="overview-item">
         <span class="overview-label">訂閱總數</span>
-        <strong class="overview-value">{{ subscriptions.length }}</strong>
+        <strong class="overview-value">{{ pagination.total }}</strong>
       </div>
       <div class="overview-item">
         <span class="overview-label">通知啟用中</span>
@@ -201,12 +254,15 @@ onMounted(loadSubscriptions);
           <h2 id="subscription-list-heading">你的訂閱</h2>
           <p>Feed 健康狀態與通知狀態分開顯示。</p>
         </div>
-        <el-button text :loading="isLoading" @click="loadSubscriptions"
+        <el-button
+          text
+          :loading="isInitialLoading || isPageLoading"
+          @click="loadSubscriptions"
           >重新整理</el-button
         >
       </div>
 
-      <div v-if="isLoading" class="empty-state">
+      <div v-if="isInitialLoading" class="empty-state">
         <el-skeleton :rows="4" animated />
       </div>
       <div v-else-if="listError" class="list-error">
@@ -216,87 +272,104 @@ onMounted(loadSubscriptions);
       <div v-else-if="subscriptions.length === 0" class="empty-state">
         <el-empty description="還沒有訂閱 Feed" />
       </div>
-      <div v-else class="subscription-list">
-        <article
-          v-for="subscription in subscriptions"
-          :key="subscription.publicId"
-          class="subscription-row"
+      <div v-else class="subscription-table-wrapper">
+        <el-table
+          :data="subscriptions"
+          stripe
+          border
+          v-loading="isPageLoading"
+          style="width: 100%"
         >
-          <div>
-            <h3 class="feed-name">{{ subscription.feed.title }}</h3>
-            <span class="feed-url">{{ subscription.feed.url }}</span>
-          </div>
+          <el-table-column label="Feed 名稱" min-width="220">
+            <template #default="{ row }">
+              <div class="feed-title-cell">
+                <h3 class="feed-name">{{ row.feed.title }}</h3>
+                <span class="feed-url">{{ row.feed.url }}</span>
+              </div>
+            </template>
+          </el-table-column>
 
-          <div>
-            <span class="feed-meta-label">狀態</span>
-            <div class="status-stack">
-              <span
-                class="status-chip"
-                :class="
-                  subscription.status === 'PAUSED'
-                    ? 'status-chip--paused'
-                    : 'status-chip--healthy'
-                "
+          <el-table-column label="Feed URL" min-width="220">
+            <template #default="{ row }">
+              <span class="feed-url">{{ row.feed.url }}</span>
+            </template>
+          </el-table-column>
+
+          <el-table-column label="Feed 狀態" min-width="120">
+            <template #default="{ row }">
+              <el-tag
+                :type="row.feed.status === 'ERROR' ? 'danger' : 'success'"
               >
-                {{
-                  subscription.status === "PAUSED" ? "通知已暫停" : "通知啟用中"
-                }}
-              </span>
-              <span
-                class="status-chip"
-                :class="
-                  subscription.feed.status === 'ERROR'
-                    ? 'status-chip--error'
-                    : 'status-chip--healthy'
-                "
-              >
-                {{
-                  subscription.feed.status === "ERROR"
-                    ? "Feed 異常"
-                    : "Feed 正常"
-                }}
-              </span>
-            </div>
-          </div>
+                {{ row.feed.status === "ERROR" ? "Feed 異常" : "Feed 正常" }}
+              </el-tag>
+            </template>
+          </el-table-column>
 
-          <div>
-            <span class="feed-meta-label">最近成功同步</span>
-            <span class="feed-meta-value">{{
-              formatDate(subscription.feed.lastSyncedAt)
-            }}</span>
-            <span
-              v-if="subscription.feed.lastError"
-              class="feed-url text-red-700"
-            >
-              最近錯誤：{{ subscription.feed.lastError }}
-            </span>
-          </div>
+          <el-table-column label="訂閱狀態" min-width="130">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'ACTIVE' ? 'success' : 'warning'">
+                {{ row.status === "ACTIVE" ? "通知啟用中" : "通知已暫停" }}
+              </el-tag>
+            </template>
+          </el-table-column>
 
-          <div class="row-actions">
-            <el-button
-              text
-              :loading="busySubscriptionId === subscription.publicId"
-              :disabled="
-                Boolean(
-                  busySubscriptionId &&
-                  busySubscriptionId !== subscription.publicId,
-                )
-              "
-              @click="toggleSubscription(subscription)"
-            >
-              {{ subscription.status === "ACTIVE" ? "暫停" : "恢復" }}
-            </el-button>
-            <el-button
-              text
-              type="danger"
-              :loading="busySubscriptionId === subscription.publicId"
-              :disabled="Boolean(busySubscriptionId)"
-              @click="removeSubscription(subscription)"
-            >
-              刪除
-            </el-button>
-          </div>
-        </article>
+          <el-table-column label="最後同步時間" min-width="170">
+            <template #default="{ row }">
+              {{ formatDate(row.feed.lastSyncedAt) }}
+            </template>
+          </el-table-column>
+
+          <el-table-column label="最新錯誤" min-width="220">
+            <template #default="{ row }">
+              {{ row.feed.lastError || "—" }}
+            </template>
+          </el-table-column>
+
+          <el-table-column label="建立時間" min-width="170">
+            <template #default="{ row }">
+              {{ formatDate(row.createdAt) }}
+            </template>
+          </el-table-column>
+
+          <el-table-column label="操作" width="180" fixed="right">
+            <template #default="{ row }">
+              <div class="row-actions table-actions">
+                <el-button
+                  text
+                  :loading="busySubscriptionId === row.id"
+                  :disabled="
+                    Boolean(busySubscriptionId && busySubscriptionId !== row.id)
+                  "
+                  @click="toggleSubscription(row)"
+                >
+                  {{ row.status === "ACTIVE" ? "暫停" : "恢復" }}
+                </el-button>
+                <el-button
+                  text
+                  type="danger"
+                  :loading="busySubscriptionId === row.id"
+                  :disabled="Boolean(busySubscriptionId)"
+                  @click="removeSubscription(row)"
+                >
+                  刪除
+                </el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <div class="table-pagination">
+          <el-pagination
+            :current-page="pagination.page"
+            :page-size="pagination.limit"
+            :total="pagination.total"
+            :page-sizes="[10, 20, 50]"
+            layout="total, sizes, prev, pager, next, jumper"
+            @current-change="handlePageChange"
+            @size-change="handlePageSizeChange"
+            :disabled="isPageLoading"
+          />
+        </div>
       </div>
     </section>
 
