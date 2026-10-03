@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
-import { PersistentSchedulerLogger } from '../scheduler/persistent-scheduler-logger.service';
+import { PersistentSchedulerLogger } from './persistent-scheduler-logger.service';
 import { MagicLinkCleanupScheduler } from './magic-link-cleanup.scheduler';
 
 jest.mock('../prisma/prisma.service', () => ({

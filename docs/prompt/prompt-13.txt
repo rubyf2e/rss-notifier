@@ -1,0 +1,45 @@
+請先分析目前 Backend 的所有 Scheduler，不要立即修改。
+
+目標：將 Scheduler 的「檔案與 Module 管理」集中，但不集中業務邏輯。
+
+先檢查：
+
+- 所有 `*.scheduler.ts`
+- 各 Scheduler 目前所屬 Module
+- Scheduler 使用的 Service / dependency
+- AppModule / ScheduleModule
+- 現有 tests
+
+目標結構：
+
+```text
+backend/src/scheduler/
+├── scheduler.module.ts
+├── feed-sync.scheduler.ts
+├── notification-dispatch.scheduler.ts
+└── magic-link-cleanup.scheduler.ts
+```
+
+規則：
+
+- 每個 Scheduler 保留獨立檔案。
+- SchedulerModule 統一註冊 Scheduler。
+- 業務邏輯仍留在原本 Service。
+- 不建立 SchedulerManager / Factory / Registry 等額外 abstraction。
+- 不改 Cron 頻率。
+- 不改 Scheduler 執行邏輯。
+- 不改 Queue / Email / Feed sync / DB behavior。
+- 不修改 API、Prisma schema、dependency。
+- 保留既有 tests，必要時只調整 import / module wiring。
+- 不修改無關檔案。
+- 若移動檔案會造成 dependency cycle，先停止並回報，不自行重構。
+
+若現有架構已適合集中管理，再做最小修改。
+
+完成後執行 Docker Backend 的相關 tests、lint、build。
+
+完成後只回報：
+1. Scheduler 原位置 → 新位置
+2. Module wiring 修改
+3. Tests / lint / build 結果
+4. 是否發現 dependency cycle 或其他阻塞

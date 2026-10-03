@@ -1,0 +1,92 @@
+依 `copilot-instructions.md` 執行。
+
+請依照：
+
+`postman/rss-notifier-api.postman_collection.json`
+
+產生：
+
+`api.md`
+
+盡可能使用中文
+
+### Source Priority
+
+以 Postman Collection 的 endpoint / method / request / response 為主要文件來源。
+
+搜尋 `/backend` 驗證實際實作：
+
+- Controller
+- DTO
+- Service
+- Auth / Guard
+- Response mapping
+- Error handling
+
+若 Postman 與 Backend 實作不一致：
+
+- 不自行猜測或修改 API。
+- 以目前實際 API contract 為準。
+- 在 `api.md` 明確標示差異。
+
+### api.md
+
+完整整理目前 API，至少包含：
+
+- Endpoint
+- HTTP Method
+- Authentication
+- Request headers
+- Path parameters
+- Query parameters
+- Request body
+- Success response
+- Error responses
+- 欄位說明
+- 必要的驗證規則
+- Auth / authorization 行為
+
+依 API 功能分類，例如：
+
+- Public / Authentication
+- Subscriptions
+- Unsubscribe
+- 其他目前存在的 API
+
+### Rules
+
+- 只產生 `api.md`，不要修改 Backend。
+- 不修改 Postman collection。
+- 不修改 API contract。
+- 不新增 package。
+- 不自行新增不存在的 endpoint。
+- 不自行發明 request / response 欄位。
+- 不把 Prisma entity、DB internal ID、raw token/hash 當成公開 API 欄位，除非 Postman 明確顯示且目前 API 確實會回傳。
+- UUID/public ID 依實際 API response 說明。
+- Response example 優先使用 Postman collection 中已有的 example；沒有 example 才依 Backend 實際 response 結構整理。
+- Error response 依實際 Controller / exception handling / Postman 定義整理，不自行假設 HTTP status。
+- 保持文件與目前實作一致，不順便重構任何程式碼。
+
+### Process
+
+先讀：
+
+`postman/rss-notifier-api.postman_collection.json`
+
+再搜尋：
+
+`backend/`
+
+對照 Postman 與實際 Backend implementation。
+
+完成後產生：
+
+`api.md`
+
+最後只回報：
+
+1. `api.md` 路徑
+2. 收錄的 API 數量
+3. 使用的主要來源
+4. 發現的 Postman / Backend contract 差異
+5. 是否有無法從目前程式碼確認的欄位或行為

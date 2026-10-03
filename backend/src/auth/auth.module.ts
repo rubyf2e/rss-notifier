@@ -2,10 +2,9 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { Module } from '@nestjs/common';
 import { MailModule } from '../mail/mail.module';
-import { PersistentSchedulerLogger } from '../scheduler/persistent-scheduler-logger.service';
-import { MagicLinkCleanupScheduler } from './magic-link-cleanup.scheduler';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Module({
   imports: [
@@ -25,6 +24,7 @@ import { AuthService } from './auth.service';
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, MagicLinkCleanupScheduler, PersistentSchedulerLogger],
+  providers: [AuthService, JwtAuthGuard],
+  exports: [JwtAuthGuard, JwtModule],
 })
 export class AuthModule {}

@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   PersistentSchedulerLogger,
   SchedulerRunLog,
-} from '../scheduler/persistent-scheduler-logger.service';
+} from './persistent-scheduler-logger.service';
 
 @Injectable()
 export class MagicLinkCleanupScheduler {

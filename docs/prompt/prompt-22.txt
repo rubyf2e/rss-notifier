@@ -1,0 +1,178 @@
+依 `copilot-instructions.md` 執行。
+
+本次只處理 **API 文件與 Postman Collection 一致性**，不要修改 Backend API 實作。
+
+目標：
+
+- 以目前 `backend/` 的實際 API contract 為準
+- 修正 `postman/rss-notifier-api.postman_collection.json`
+- 最後同步更新 `api.md`
+
+### 先檢查
+
+讀取：
+
+- `backend/`
+- `postman/rss-notifier-api.postman_collection.json`
+- `api.md`
+
+確認目前實際：
+
+- Controller endpoint / method
+- Path parameters
+- Query parameters
+- Request body
+- DTO validation
+- Authentication
+- Success status / response
+- Error status / `message`
+- Subscription pagination
+- Pause / Resume / Delete
+- Magic link
+- Unsubscribe
+
+不要修改 Backend。
+
+### Postman
+
+以 Backend 實際 contract 修正：
+
+`postman/rss-notifier-api.postman_collection.json`
+
+確保：
+
+- endpoint path 與 Controller 完全一致
+- HTTP method 一致
+- auth 設定一致
+- request body 一致
+- query parameters 一致
+- path parameters 一致
+- response assertions 不再驗證過時格式
+- pagination response 依目前 Backend contract 驗證：
+  - `items`
+  - `page`
+  - `limit`
+  - `total`
+  - `totalPages`
+- success status assertions 與 Backend 一致
+- error cases 的 status / response assertions 與 Backend 一致
+
+目前已知要特別確認：
+
+```text
+GET /subscriptions
+```
+
+目前 Backend 是：
+
+```json
+{
+  "items": [],
+  "page": 1,
+  "limit": 20,
+  "total": 0,
+  "totalPages": 0
+}
+```
+
+不要再讓 Postman 把 response 當成單純 array。
+
+另外確認目前實際 endpoint 是否為：
+
+```text
+PATCH /subscriptions/:publicId/pause
+PATCH /subscriptions/:publicId/resume
+DELETE /subscriptions/:publicId
+GET /subscriptions/unsubscribe
+```
+
+以 Backend 實際 Controller 為準，不要依舊文件猜測。
+
+### Postman Tests
+
+保留既有有價值的測試情境，並修正過時 assertions。
+
+至少確認：
+
+- Magic link request
+- Magic link validation
+- Invalid / missing token
+- Login success response
+- Subscription create
+- Duplicate subscription
+- Subscription list
+- Pagination
+- Pause
+- Resume
+- Delete
+- Unauthorized request
+- Unsubscribe
+
+不要為了測試而修改 Backend 行為。
+
+不要新增不存在的 endpoint。
+
+### api.md
+
+Postman 修正完成後，再同步更新：
+
+`api.md`
+
+`api.md` 必須與：
+
+```text
+Backend
+   ↕
+Postman
+   ↕
+api.md
+```
+
+一致。
+
+文件內容至少保持：
+
+- endpoint
+- method
+- authentication
+- headers
+- path parameters
+- query parameters
+- request body
+- success response
+- error responses
+- validation rules
+- response field descriptions
+
+### 文件原則
+
+- 以 Backend 實際 contract 為最終來源。
+- Postman example / tests 用來驗證與呈現實際 API。
+- 不把 Postman 舊內容當成 API contract。
+- 不自行發明 endpoint、欄位、status code 或 error message。
+- Backend 與 Postman 不一致時，以 Backend 為準並修正 Postman。
+- `api.md` 最後依修正後的 Backend + Postman 同步更新。
+- 不需要保留「Postman / Backend 差異」段落來描述已修正的差異。
+- 若仍存在無法由 Backend 確認的內容，明確標示，而不是猜測。
+
+### Validation
+
+不要修改 Backend。
+
+檢查：
+
+1. Postman JSON 格式有效。
+2. Collection 中所有 endpoint 都能對應目前 Backend Controller。
+3. Postman request / assertions 與 Backend contract 一致。
+4. `api.md` 與 Postman、Backend 一致。
+5. 不存在過時的 endpoint、response schema、pagination assertion。
+
+如果有可用的 Postman CLI / collection runner，執行相關 collection tests；否則至少進行 JSON / contract 靜態檢查。
+
+完成後只回報：
+
+1. 修改的檔案
+2. Postman 修正內容
+3. `api.md` 修正內容
+4. 是否仍有 Backend / Postman / api.md 差異
+5. 執行的 validation 與結果

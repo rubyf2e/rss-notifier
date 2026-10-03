@@ -1,0 +1,77 @@
+依 `copilot-instructions.md` 執行。
+
+本次只處理 Backend Feed Fetch 的 **Response Body 尺寸上限**，防止巨型 Feed / Endless HTTP Stream 導致 Node.js 記憶體耗盡（DoS）。
+
+### Requirements
+
+先檢查目前 Feed Fetch / HTTP client / RSS Atom parser 的完整流程，找出實際下載 Response Body 的位置。
+
+實作：
+
+- 對 Feed HTTP response 設定明確的最大 response body size。
+- 限制必須在資料完整載入記憶體前生效，不能只在 parser 完成後檢查 `body.length`。
+- 必須同時處理：
+  - 有 `Content-Length` 的巨型 response
+  - chunked response
+  - 沒有 `Content-Length` 的 endless / streaming response
+- 超過上限時立即停止讀取並中止 HTTP request。
+- 不得等待整個 response 收完才判斷。
+- 使用目前既有的 Feed HTTP client / fetch infrastructure，不建立第二套 HTTP client。
+- 若目前 client 已有 timeout / abort 機制，沿用並整合。
+- Feed fetch 超過 body limit 時，回傳可辨識且穩定的 application error，讓既有 Feed validation / scheduler error handling 能正確處理。
+- 不讓單一 Feed fetch 的錯誤造成 scheduler 整體停止。
+- 不把完整 response body 寫入 memory、log 或 error message。
+- 不記錄 Feed response 的敏感或過大的內容。
+
+### Limit
+
+先檢查目前專案是否已有 response size limit 設定或相關 constant。
+
+- 優先沿用既有設定。
+- 若沒有，建立單一明確的 default limit。
+- 不要在不同 Feed fetch 路徑各自硬編碼不同 limit。
+- 若目前 ConfigService 是既有設定機制，優先使用 ConfigService。
+- 不新增 package。
+
+### Security / Behavior
+
+- RSS 2.0、Atom 等正常 Feed 在限制內時，既有行為不得改變。
+- HTTP status、redirect、timeout、parser error 等既有處理保持不變。
+- Body 超限只新增必要的 failure path。
+- 不修改 Feed schema / API contract，除非目前 error handling 必須調整。
+- 不修改 Frontend。
+- 不修改與 Feed Fetch 無關的功能。
+
+### Tests
+
+補充 regression tests，至少覆蓋：
+
+1. 小於上限的 response 正常解析。
+2. `Content-Length` 已超過上限時拒絕。
+3. 沒有 `Content-Length`，streaming body 累積超過上限時，在讀完前中止。
+4. Endless / chunked response 不會無限累積 memory。
+5. 超限後 HTTP request / stream 確實被 abort / destroy。
+6. 超限錯誤可被既有 Feed validation / scheduler error handling 正常處理。
+7. 正常 Feed 的既有行為不受影響。
+
+若現有測試 infrastructure 已有 RSS test server / mock HTTP server，優先重用，不新增測試 server。
+
+### Validation
+
+在 Docker Backend container 執行：
+
+```bash id="e2m9g5"
+docker compose exec backend npm test
+docker compose exec backend npm run lint
+docker compose exec backend npm run build
+```
+
+若有相關單一測試，先執行該測試，再執行完整 validation。
+
+完成後只回報：
+
+1. 修改檔案
+2. Response body limit 的實作位置與限制值
+3. 如何處理 Content-Length / streaming / endless response
+4. Abort 行為
+5. Tests / validation 結果

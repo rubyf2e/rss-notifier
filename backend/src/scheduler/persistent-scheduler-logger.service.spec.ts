@@ -3,6 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  getSchedulerLogFilePath,
   PersistentSchedulerLogger,
   SchedulerRunLog,
 } from './persistent-scheduler-logger.service';
@@ -14,9 +15,26 @@ describe('PersistentSchedulerLogger', () => {
     logger = new PersistentSchedulerLogger();
   });
 
-  it('自動建立目錄並以 append 寫入多筆 JSON Lines，同時遮蔽敏感字串', async () => {
+  it('依開始日期和 scheduler 名稱產生獨立文字檔路徑', () => {
+    const logDirectory = '/tmp/scheduler-logs';
+
+    expect(getSchedulerLogFilePath({
+      schedulerName: 'FeedSyncScheduler',
+      startedAt: '2026-10-04T00:00:00.000Z',
+    }, logDirectory)).toBe(join(logDirectory, '2026-10-04-FeedSyncScheduler.txt'));
+    expect(getSchedulerLogFilePath({
+      schedulerName: 'MagicLinkCleanupScheduler',
+      startedAt: '2026-10-04T00:00:00.000Z',
+    }, logDirectory)).toBe(join(logDirectory, '2026-10-04-MagicLinkCleanupScheduler.txt'));
+    expect(getSchedulerLogFilePath({
+      schedulerName: 'FeedSyncScheduler',
+      startedAt: '2026-10-05T00:00:00.000Z',
+    }, logDirectory)).toBe(join(logDirectory, '2026-10-05-FeedSyncScheduler.txt'));
+  });
+
+  it('自動建立目錄並以純文字 append 多筆排程紀錄，同時遮蔽敏感字串', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'scheduler-log-'));
-    const filePath = join(directory, 'nested', 'scheduler.jsonl');
+    const filePath = join(directory, 'nested', 'scheduler.txt');
     const entry: SchedulerRunLog = {
       schedulerName: 'MagicLinkCleanupScheduler',
       startedAt: '2026-10-02T00:00:00.000Z',
@@ -35,14 +53,10 @@ describe('PersistentSchedulerLogger', () => {
 
       const lines = (await readFile(filePath, 'utf8')).trim().split('\n');
       expect(lines).toHaveLength(2);
-      expect(JSON.parse(lines[0])).toEqual({
-        ...entry,
-        error: {
-          message: 'Authorization=[REDACTED] [REDACTED] password=[REDACTED]',
-          stack: 'Error: token=[REDACTED]',
-        },
-      });
-      expect(JSON.parse(lines[1]).status).toBe('success');
+      expect(lines[0]).toContain('scheduler=MagicLinkCleanupScheduler status=failure');
+      expect(lines[0]).toContain('error="Authorization=[REDACTED] [REDACTED] password=[REDACTED]"');
+      expect(lines[0]).toContain('stack="Error: token=[REDACTED]"');
+      expect(lines[1]).toContain('status=success');
       expect(lines.join('\n')).not.toContain('sample-token');
       expect(lines.join('\n')).not.toContain('sample-password');
     } finally {
@@ -64,7 +78,7 @@ describe('PersistentSchedulerLogger', () => {
     };
 
     try {
-      await expect(logger.append(entry, join(blockerPath, 'scheduler.jsonl'))).resolves.toBeUndefined();
+      await expect(logger.append(entry, join(blockerPath, 'scheduler.txt'))).resolves.toBeUndefined();
       expect(loggerError).toHaveBeenCalled();
     } finally {
       loggerError.mockRestore();
