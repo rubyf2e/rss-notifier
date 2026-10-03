@@ -1,0 +1,111 @@
+@media (max-width: 800px) {
+  .login-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .login-aside {
+    min-height: auto;
+    padding: 28px 24px;
+  }
+
+  .login-aside-copy {
+    padding: 42px 0 24px;
+  }
+
+  .login-aside h1 {
+    font-size: 40px;
+  }
+
+  .login-main {
+    padding: 44px 24px 64px;
+  }
+
+  .dashboard-main {
+    width: min(100% - 32px, 620px);
+    padding-top: 30px;
+  }
+
+  .subscription-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  .subscription-row > :nth-child(2),
+  .subscription-row > :nth-child(3) {
+    grid-column: 1;
+  }
+
+  .subscription-row > :nth-child(2) {
+    grid-row: 2;
+  }
+
+  .subscription-row > :nth-child(3) {
+    grid-row: 3;
+  }
+
+  .row-actions {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-header {
+    min-height: 60px;
+    padding: 0 16px;
+  }
+
+  .app-header-nav,
+  .account-email {
+    display: none;
+  }
+
+  .app-header-account {
+    gap: 4px;
+  }
+
+  .dashboard-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .overview-grid {
+    gap: 8px;
+  }
+
+  .overview-item {
+    min-height: 88px;
+    padding: 13px 11px;
+  }
+
+  .overview-label {
+    font-size: 10px;
+  }
+
+  .overview-value {
+    font-size: 24px;
+  }
+
+  .feed-form {
+    grid-template-columns: 1fr;
+  }
+
+  .feed-form .el-button {
+    width: 100%;
+  }
+
+  .section-header,
+  .subscription-list {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .subscription-row {
+    gap: 10px;
+  }
+
+  .row-actions .el-button {
+    padding: 7px 9px;
+  }
+}

@@ -1,0 +1,34 @@
+依 `copilot-instructions.md` 執行。
+
+目前 Frontend 的 CSS 已集中在單一 SCSS，請先只分析，不修改任何檔案。
+
+檢查：
+- `frontend/app/assets/` 下現有 CSS/SCSS
+- `nuxt.config.ts` 的 style 載入方式
+- 所有 Vue `<style>` / `<style scoped>`
+- 全域樣式、Element Plus override、layout、component、page、responsive、utility styles
+
+請根據「樣式責任」提出拆分方案，不要單純依檔案名稱拆分。
+
+建議分類：
+- variables / mixins / base
+- layout
+- components
+- pages
+- utilities
+
+規則：
+- 避免過度拆分
+- 相同用途樣式集中
+- Element Plus override 與一般專案樣式分開
+- 保留目前 UI 行為與 responsive 行為
+- 不新增 npm package
+- 不修改 Backend
+
+只輸出：
+1. 現有 SCSS 結構問題
+2. 建議的新目錄/檔案結構
+3. 每個現有樣式應移到哪個檔案
+4. `main.scss` 最終負責什麼
+
+不要修改任何檔案。

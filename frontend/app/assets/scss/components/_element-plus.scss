@@ -1,0 +1,41 @@
+.login-card .el-input__wrapper,
+.feed-form .el-input__wrapper {
+  min-height: 44px;
+  box-shadow: 0 0 0 1px var(--color-line) inset;
+}
+
+.login-card .el-button--primary,
+.feed-form .el-button--primary,
+.unsubscribe-card .el-button--primary {
+  min-height: 42px;
+  border-color: var(--color-green);
+  background: var(--color-green);
+}
+
+.login-card .el-button--primary:hover,
+.feed-form .el-button--primary:hover,
+.unsubscribe-card .el-button--primary:hover {
+  border-color: var(--color-green-dark);
+  background: var(--color-green-dark);
+}
+
+.feed-form .el-form-item {
+  margin-bottom: 0;
+}
+
+.feed-form .el-form-item__error {
+  position: static;
+  padding-top: 5px;
+}
+
+.row-actions .el-button + .el-button {
+  margin-left: 0;
+}
+
+.list-error .el-alert {
+  margin-bottom: 12px;
+}
+
+.unsubscribe-card .el-alert {
+  margin: 18px 0;
+}

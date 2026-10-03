@@ -22,6 +22,7 @@
 - DTO / Config
 - Prisma / Queue / Processor / Scheduler
 - Tests
+- Frontend pages / components / composables / styles
 
 優先重用現有實作；不要先重構或建立新 abstraction。
 
@@ -35,12 +36,15 @@
 
 ## Dependencies
 
-- 專案已允許 Frontend 使用：
-  - `sass`
-  - Tailwind CSS
-  - Element Plus / `@element-plus/nuxt`
-- 除上述既有 Frontend UI dependencies 外，不自行新增 package，除非當次需求明確允許。
-- 不修改 `package.json` / lockfile，除非當次需求涉及 dependency 變更。
+Frontend 已使用：
+
+- Sass / SCSS
+- Tailwind CSS
+- Element Plus / `@element-plus/nuxt`
+
+除既有 dependencies 外，不自行新增 package，除非當次需求明確允許。
+
+不修改 `package.json` / lockfile，除非當次需求涉及 dependency 變更。
 
 ## Existing Infrastructure
 
@@ -97,27 +101,33 @@
 
 - 使用 Nuxt 4、Vue 3、`<script setup lang="ts">`。
 - UI component 使用 Element Plus。
-- Layout、spacing、responsive、utility styling 優先使用 Tailwind CSS。
-- Global styles、design tokens、Element Plus overrides、複雜或共用樣式使用 SCSS。
-- 優先沿用既有 composables、components、styles。
+- 優先沿用既有 pages、components、composables、styles。
+- Layout、spacing、responsive、簡單 utility 優先使用 Tailwind CSS。
+- Global styles、design tokens、Element Plus overrides、複雜/共用樣式使用 SCSS。
 - 保持 SSR/client 邊界；browser API 只能在 client context 使用。
 - 不把 mock 行為視為正式 API contract。
 
 ## Styling
 
-- Vue `.vue` 檔案禁止使用 `<style>` / `<style scoped>`。
-- 不在 component/page 內撰寫 CSS/SCSS。
-- 不使用 inline `style`，除非需求明確要求動態 inline style。
-- SCSS 統一放在 `frontend/app/assets/scss/`。
-- 全域 SCSS 入口為 `frontend/app/assets/scss/main.scss`，由 Nuxt 現有方式載入。
-- SCSS 使用 `@use` 管理 partials。
-- 共用 tokens / variables / mixins / Element Plus overrides 集中管理。
-- Component / Page 專屬複雜樣式也放在 SCSS，不寫回 `.vue`。
-- Tailwind 優先處理 layout、spacing、responsive 與簡單 utility styling。
-- 不為 Tailwind 已能處理的樣式建立 SCSS。
-- Element Plus 優先使用 props / classes / theme variables；只有必要時才覆寫 SCSS。
-- 避免建立重複的 variables、mixins 或 utility classes。
-- 修改樣式時只修改必要檔案，不順便重構無關樣式。
+- `.vue` 禁止使用 `<style>` / `<style scoped>`。
+- 不在 `.vue` 撰寫 CSS/SCSS。
+- 不使用 inline `style`，除非需求明確需要動態 inline style。
+- 所有 SCSS 放在 `frontend/app/assets/scss/`。
+- 全域入口為 `frontend/app/assets/scss/main.scss`，沿用 Nuxt 現有載入方式。
+- 使用 Sass partials + `@use`，避免所有樣式集中在單一 SCSS。
+- SCSS 依責任拆分，例如：
+  - `base/`：reset、base styles
+  - `layout/`：layout、container、responsive
+  - `components/`：共用 component styles
+  - `pages/`：page-specific styles
+  - `utilities/`：必要的共用 utility
+  - `variables/` / `mixins/`：design tokens、mixins
+- 不因少量樣式過度拆分檔案。
+- `main.scss` 只負責組合 partials，不放大量實際樣式。
+- Tailwind 優先處理 layout、spacing、responsive、簡單 utility；不要為 Tailwind 已能處理的樣式建立 SCSS。
+- Element Plus 優先使用 props / classes / theme variables；只有必要時才使用 SCSS override。
+- 共用 styles / variables / mixins 不重複定義。
+- 修改樣式時維持現有 UI 與 responsive 行為，只修改必要範圍。
 
 ## Testing
 
@@ -134,7 +144,7 @@
 
 Backend 測試、lint、build 一律在 Docker Backend container 執行：
 
-```
+```bash
 docker compose exec backend npm run lint
 docker compose exec backend npm test
 docker compose exec backend npm run test:e2e
@@ -145,7 +155,7 @@ docker compose exec backend npm run build
 
 Frontend：
 
-```
+```bash
 docker compose exec frontend npm run build
 ```
 
