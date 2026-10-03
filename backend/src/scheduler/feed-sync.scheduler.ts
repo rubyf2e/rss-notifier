@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { NotificationService } from '../mail/notification.service';
-import { FeedSyncService } from './feed-sync.service';
+import { FeedSyncService } from '../feeds/feed-sync.service';
 
 const DEFAULT_INTERVAL_MINUTES = 15;
 

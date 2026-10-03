@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { NotificationService } from '../mail/notification.service';
-import { FeedSyncService } from './feed-sync.service';
+import { FeedSyncService } from '../feeds/feed-sync.service';
 import { FeedSyncScheduler } from './feed-sync.scheduler';
 
 jest.mock('../prisma/prisma.service', () => ({
