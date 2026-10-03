@@ -34,6 +34,7 @@ describe('登入 API 控制器', () => {
     }).compile();
 
     app = module.createNestApplication();
+    app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
     await app.init();
   });
@@ -44,7 +45,7 @@ describe('登入 API 控制器', () => {
 
   it('接受有效的登入連結請求，且不洩漏帳號是否存在', async () => {
     await request(app.getHttpServer())
-      .post('/auth/magic-link')
+      .post('/api/auth/magic-link')
       .send({ email: 'user@example.com' })
       .expect(202)
       .expect({ message: 'If this email can be used, a login link has been sent.' });
@@ -53,7 +54,7 @@ describe('登入 API 控制器', () => {
 
   it('驗證請求中的電子郵件格式', async () => {
     await request(app.getHttpServer())
-      .post('/auth/magic-link')
+      .post('/api/auth/magic-link')
       .send({ email: 'not-an-email' })
       .expect(400);
     expect(authService.requestMagicLink).not.toHaveBeenCalled();
@@ -61,7 +62,7 @@ describe('登入 API 控制器', () => {
 
   it('驗證查詢參數中的 token 並回傳登入使用者', async () => {
     await request(app.getHttpServer())
-      .get('/auth/magic-link/verify')
+      .get('/api/auth/magic-link/verify')
       .query({ token: 'opaque-token' })
       .expect(200)
       .expect({
@@ -99,12 +100,13 @@ describe('登入連結 API 的 Queue 整合', () => {
       ],
     }).compile();
     const app = module.createNestApplication();
+    app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
     await app.init();
 
     try {
       await request(app.getHttpServer())
-        .post('/auth/magic-link')
+        .post('/api/auth/magic-link')
         .send({ email: user.email })
         .expect(202)
         .expect({ message: 'If this email can be used, a login link has been sent.' });

@@ -98,7 +98,7 @@ describe('MailProcessor', () => {
     });
     const email = mailerService.sendMail.mock.calls[0][0];
     expect(email.html).toContain('https://feed.example/articles/1');
-    expect(email.html).toContain('/subscriptions/unsubscribe?token&#x3D;');
+    expect(email.html).toContain('/api/subscriptions/unsubscribe?token&#x3D;');
     expect(prisma.notificationLog.update).toHaveBeenCalledWith({
       where: { id: 22n },
       data: expect.objectContaining({ status: 'SENT', sentAt: expect.any(Date) }),

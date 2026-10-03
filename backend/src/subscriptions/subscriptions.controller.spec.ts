@@ -46,6 +46,7 @@ describe('訂閱 API 控制器', () => {
     }).compile();
 
     app = module.createNestApplication();
+    app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
     await app.init();
   });
@@ -55,7 +56,7 @@ describe('訂閱 API 控制器', () => {
   });
 
   it('未登入時拒絕存取訂閱 API', async () => {
-    await request(app.getHttpServer()).get('/subscriptions').expect(401);
+    await request(app.getHttpServer()).get('/api/subscriptions').expect(401);
     expect(subscriptionsService.list).not.toHaveBeenCalled();
   });
 
@@ -69,7 +70,7 @@ describe('訂閱 API 控制器', () => {
     });
 
     await request(app.getHttpServer())
-      .get('/subscriptions')
+      .get('/api/subscriptions')
       .set('Authorization', 'Bearer access-token')
       .expect(200)
       .expect({ items: [], page: 1, limit: 20, total: 0, totalPages: 0 });
@@ -88,7 +89,7 @@ describe('訂閱 API 控制器', () => {
     });
 
     await request(app.getHttpServer())
-      .get('/subscriptions?page=2&limit=7')
+      .get('/api/subscriptions?page=2&limit=7')
       .set('Authorization', 'Bearer access-token')
       .expect(200)
       .expect({ items: [], page: 2, limit: 7, total: 0, totalPages: 0 });
@@ -110,7 +111,7 @@ describe('訂閱 API 控制器', () => {
       '?page=invalid',
     ]) {
       await request(app.getHttpServer())
-        .get(`/subscriptions${query}`)
+        .get(`/api/subscriptions${query}`)
         .set('Authorization', authorization)
         .expect(400);
     }
@@ -128,7 +129,7 @@ describe('訂閱 API 控制器', () => {
     });
 
     await request(app.getHttpServer())
-      .get('/subscriptions?limit=100')
+      .get('/api/subscriptions?limit=100')
       .set('Authorization', 'Bearer access-token')
       .expect(200);
 
@@ -137,14 +138,14 @@ describe('訂閱 API 控制器', () => {
 
   it('驗證新增訂閱的 URL DTO 並將登入者傳給 service', async () => {
     await request(app.getHttpServer())
-      .post('/subscriptions')
+      .post('/api/subscriptions')
       .set('Authorization', 'Bearer access-token')
       .send({ url: 'not-a-url' })
       .expect(400);
     expect(subscriptionsService.create).not.toHaveBeenCalled();
 
     await request(app.getHttpServer())
-      .post('/subscriptions')
+      .post('/api/subscriptions')
       .set('Authorization', 'Bearer access-token')
       .send({ url: 'https://feed.example/rss' })
       .expect(201)
@@ -157,12 +158,12 @@ describe('訂閱 API 控制器', () => {
 
   it('回傳暫停與恢復路由的實際結果', async () => {
     await request(app.getHttpServer())
-      .patch('/subscriptions/subscription-1/pause')
+      .patch('/api/subscriptions/subscription-1/pause')
       .set('Authorization', 'Bearer access-token')
       .expect(200)
       .expect({ id: 'subscription-1', status: 'PAUSED' });
     await request(app.getHttpServer())
-      .patch('/subscriptions/subscription-1/resume')
+      .patch('/api/subscriptions/subscription-1/resume')
       .set('Authorization', 'Bearer access-token')
       .expect(200)
       .expect({ id: 'subscription-1', status: 'ACTIVE' });
@@ -170,7 +171,7 @@ describe('訂閱 API 控制器', () => {
 
   it('刪除訂閱時回傳 204', async () => {
     await request(app.getHttpServer())
-      .delete('/subscriptions/subscription-1')
+      .delete('/api/subscriptions/subscription-1')
       .set('Authorization', 'Bearer access-token')
       .expect(204);
 
@@ -182,7 +183,7 @@ describe('訂閱 API 控制器', () => {
 
   it('取消訂閱連結不需登入並顯示確認頁', async () => {
     await request(app.getHttpServer())
-      .get(`/subscriptions/unsubscribe?token=${'a'.repeat(64)}`)
+      .get(`/api/subscriptions/unsubscribe?token=${'a'.repeat(64)}`)
       .expect(200)
       .expect('Content-Type', /text\/html/)
       .expect((response) => {
@@ -195,7 +196,7 @@ describe('訂閱 API 控制器', () => {
 
   it('取消訂閱 token 格式錯誤時回傳 400', async () => {
     await request(app.getHttpServer())
-      .get('/subscriptions/unsubscribe?token=invalid')
+      .get('/api/subscriptions/unsubscribe?token=invalid')
       .expect(400);
     expect(subscriptionsService.unsubscribe).not.toHaveBeenCalled();
   });

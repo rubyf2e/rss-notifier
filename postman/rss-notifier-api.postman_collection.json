@@ -13,7 +13,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/"
+            "url": "{{baseUrl}}/api/"
           },
           "event": [
             {
@@ -56,7 +56,7 @@
                 }
               }
             },
-            "url": "{{baseUrl}}/auth/magic-link"
+            "url": "{{baseUrl}}/api/auth/magic-link"
           },
           "event": [
             {
@@ -92,7 +92,7 @@
                 }
               }
             },
-            "url": "{{baseUrl}}/auth/magic-link"
+            "url": "{{baseUrl}}/api/auth/magic-link"
           },
           "event": [
             {
@@ -117,7 +117,7 @@
             "method": "GET",
             "header": [],
             "description": "先呼叫 Request magic link，從收到的 Email 取得 token，填入 collection variable magicLinkToken 後再執行。",
-            "url": "{{baseUrl}}/auth/magic-link/verify?token={{magicLinkToken}}"
+            "url": "{{baseUrl}}/api/auth/magic-link/verify?token={{magicLinkToken}}"
           },
           "event": [
             {
@@ -143,7 +143,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/auth/magic-link/verify"
+            "url": "{{baseUrl}}/api/auth/magic-link/verify"
           },
           "event": [
             {
@@ -168,7 +168,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/auth/magic-link/verify?token={{invalidMagicLinkToken}}"
+            "url": "{{baseUrl}}/api/auth/magic-link/verify?token={{invalidMagicLinkToken}}"
           },
           "event": [
             {
@@ -195,7 +195,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/subscriptions"
+            "url": "{{baseUrl}}/api/subscriptions"
           },
           "event": [
             {
@@ -227,7 +227,7 @@
               "raw": "{\n  \"url\": \"https://example.com/feed.xml\"\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "url": "{{baseUrl}}/subscriptions"
+            "url": "{{baseUrl}}/api/subscriptions"
           },
           "event": [
             {
@@ -256,7 +256,7 @@
             "header": [
               { "key": "Authorization", "value": "Bearer {{accessToken}}" }
             ],
-            "url": "{{baseUrl}}/subscriptions"
+            "url": "{{baseUrl}}/api/subscriptions"
           },
           "event": [
             {
@@ -286,7 +286,7 @@
             "header": [
               { "key": "Authorization", "value": "Bearer {{accessToken}}" }
             ],
-            "url": "{{baseUrl}}/subscriptions?page=1&limit=1"
+            "url": "{{baseUrl}}/api/subscriptions?page=1&limit=1"
           },
           "event": [
             {
@@ -321,7 +321,7 @@
               "raw": "{\n  \"url\": \"https://example.com/feed.xml\"\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "url": "{{baseUrl}}/subscriptions"
+            "url": "{{baseUrl}}/api/subscriptions"
           },
           "event": [
             {
@@ -347,7 +347,7 @@
             "header": [
               { "key": "Authorization", "value": "Bearer {{accessToken}}" }
             ],
-            "url": "{{baseUrl}}/subscriptions/{{subscriptionId}}/pause"
+            "url": "{{baseUrl}}/api/subscriptions/{{subscriptionId}}/pause"
           },
           "event": [
             {
@@ -371,7 +371,7 @@
             "header": [
               { "key": "Authorization", "value": "Bearer {{accessToken}}" }
             ],
-            "url": "{{baseUrl}}/subscriptions/{{subscriptionId}}/resume"
+            "url": "{{baseUrl}}/api/subscriptions/{{subscriptionId}}/resume"
           },
           "event": [
             {
@@ -395,7 +395,7 @@
             "header": [
               { "key": "Authorization", "value": "Bearer {{accessToken}}" }
             ],
-            "url": "{{baseUrl}}/subscriptions/{{subscriptionId}}"
+            "url": "{{baseUrl}}/api/subscriptions/{{subscriptionId}}"
           },
           "event": [
             {
@@ -417,7 +417,7 @@
             "method": "GET",
             "header": [],
             "description": "Paste the token from an article notification email. This endpoint does not require a JWT.",
-            "url": "{{baseUrl}}/subscriptions/unsubscribe?token={{unsubscribeToken}}"
+            "url": "{{baseUrl}}/api/subscriptions/unsubscribe?token={{unsubscribeToken}}"
           },
           "event": [
             {
@@ -440,7 +440,7 @@
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/subscriptions/unsubscribe?token={{invalidUnsubscribeToken}}"
+            "url": "{{baseUrl}}/api/subscriptions/unsubscribe?token={{invalidUnsubscribeToken}}"
           },
           "event": [
             {

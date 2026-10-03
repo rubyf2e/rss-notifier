@@ -134,7 +134,7 @@ export class MailProcessor extends WorkerHost {
       const backendUrl = this.configService
         .getOrThrow<string>('BACKEND_URL')
         .replace(/\/+$/, '');
-      const unsubscribeUrl = `${backendUrl}/subscriptions/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
+      const unsubscribeUrl = `${backendUrl}/api/subscriptions/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
       const template = await readFile(
         join(__dirname, 'templates/article-notification.hbs'),
         'utf8',

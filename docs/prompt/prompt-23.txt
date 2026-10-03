@@ -1,0 +1,212 @@
+依 `copilot-instructions.md` 執行。
+
+本次將所有 Backend HTTP API 統一加上 `/api` prefix，並同步更新：
+
+- Backend routing
+- `api.md`
+- `postman/rss-notifier-api.postman_collection.json`
+
+### API Prefix
+
+所有目前 HTTP API：
+
+```text
+/
+```
+
+改為：
+
+```text
+/api/
+```
+
+例如：
+
+```text
+POST /auth/magic-link
+→ POST /api/auth/magic-link
+
+GET /auth/magic-link/verify
+→ GET /api/auth/magic-link/verify
+
+GET /subscriptions
+→ GET /api/subscriptions
+
+POST /subscriptions
+→ POST /api/subscriptions
+
+PATCH /subscriptions/:publicId/pause
+→ PATCH /api/subscriptions/:publicId/pause
+
+PATCH /subscriptions/:publicId/resume
+→ PATCH /api/subscriptions/:publicId/resume
+
+DELETE /subscriptions/:publicId
+→ DELETE /api/subscriptions/:publicId
+
+GET /subscriptions/unsubscribe
+→ GET /api/subscriptions/unsubscribe
+```
+
+健康檢查也同步：
+
+```text
+GET /
+→ GET /api/
+```
+
+### Backend
+
+先檢查目前：
+
+- `main.ts`
+- Controller
+- Module
+- existing global prefix
+- E2E tests
+- Postman
+
+找出目前 routing prefix 的設定方式。
+
+優先使用 NestJS 現有的 global prefix 機制統一加入：
+
+```text
+/api
+```
+
+不要逐一修改每個 Controller 的 `@Controller()` path，除非目前架構無法使用 global prefix。
+
+不要建立第二套 routing mechanism。
+
+### 注意
+
+不要讓 `/api/api/...` 發生。
+
+確認目前沒有既有 prefix，或正確處理現有 prefix。
+
+所有 API endpoint 最終只能有一個 `/api` prefix。
+
+### Tests
+
+同步檢查 Backend tests / E2E tests 中的 API URL。
+
+所有測試應改為 `/api/...`。
+
+不要修改測試來掩蓋 routing 錯誤。
+
+執行：
+
+```bash id="3n7r5f"
+docker compose exec backend npm test
+docker compose exec backend npm run test:e2e
+docker compose exec backend npm run lint
+docker compose exec backend npm run build
+```
+
+### api.md
+
+同步修改 `api.md`：
+
+所有 endpoint path 加上 `/api`。
+
+例如：
+
+```text
+GET /
+```
+
+改為：
+
+```text
+GET /api/
+```
+
+不要只做文字 replace；確認文件中的：
+
+- endpoint
+- examples
+- request URL
+- error examples
+- endpoint references
+
+全部一致。
+
+### Postman
+
+同步修改：
+
+`postman/rss-notifier-api.postman_collection.json`
+
+所有 request URL 加上 `/api` prefix。
+
+如果 Collection 有：
+
+- variables
+- request examples
+- test scripts
+- URL assertions
+
+全部確認一致。
+
+不要產生：
+
+```text
+/api/api/...
+```
+
+Postman 的 request method、body、query、auth、tests 其他內容保持不變，除 prefix 外不要順便修改 API contract。
+
+### Frontend
+
+本次不要修改 Frontend。
+
+Frontend API base URL 由現有 `NUXT_PUBLIC_API_BASE` 控制，不在本次自行修改 Frontend code。
+
+### Constraints
+
+- Backend routing 必須實際改成 `/api`。
+- 不修改 API method。
+- 不修改 request / response contract。
+- 不修改 DTO。
+- 不修改 Prisma / schema。
+- 不修改 auth 行為。
+- 不修改 scheduler / queue / feed fetch。
+- 不新增 package。
+- 不順便重構無關程式碼。
+
+### Validation
+
+完成後確認：
+
+```text
+Backend Controller
+      ↓
+/api/...
+      ↓
+Postman
+      ↓
+api.md
+```
+
+四者一致。
+
+特別確認：
+
+- `/api/`
+- `/api/auth/magic-link`
+- `/api/auth/magic-link/verify`
+- `/api/subscriptions`
+- `/api/subscriptions/:publicId/pause`
+- `/api/subscriptions/:publicId/resume`
+- `/api/subscriptions/:publicId`
+- `/api/subscriptions/unsubscribe`
+
+不存在舊的 `/auth/...`、`/subscriptions/...` endpoint 文件或 Postman request。
+
+完成後只回報：
+
+1. 修改檔案
+2. Backend prefix 實作位置
+3. API endpoint 是否全部變成 `/api/...`
+4. `api.md` / Postman 更新結果
+5. Tests / lint / build 結果

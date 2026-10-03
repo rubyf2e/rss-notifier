@@ -14,7 +14,7 @@
 
 ### 健康檢查
 
-`GET /`
+`GET /api/`
 
 - Authentication：不需要。
 - Request headers：無。
@@ -26,7 +26,7 @@
 
 ### 申請 Email 登入連結
 
-`POST /auth/magic-link`
+`POST /api/auth/magic-link`
 
 - Authentication：不需要。
 - Request headers：`Content-Type: application/json`。
@@ -52,7 +52,7 @@
 
 ### 驗證 Email 登入連結
 
-`GET /auth/magic-link/verify`
+`GET /api/auth/magic-link/verify`
 
 - Authentication：不需要既有 access token。
 - Request headers：無。
@@ -80,7 +80,7 @@
 
 ### 建立訂閱
 
-`POST /subscriptions`
+`POST /api/subscriptions`
 
 - Authentication：需要 Bearer access token。
 - Request headers：`Authorization: Bearer <accessToken>`、`Content-Type: application/json`。
@@ -115,7 +115,7 @@
 
 ### 列出訂閱
 
-`GET /subscriptions`
+`GET /api/subscriptions`
 
 - Authentication：需要 Bearer access token。
 - Request headers：`Authorization: Bearer <accessToken>`。
@@ -153,7 +153,7 @@
 
 ### 暫停訂閱
 
-`PATCH /subscriptions/:publicId/pause`
+`PATCH /api/subscriptions/:publicId/pause`
 
 - Authentication：需要 Bearer access token。
 - Request headers：`Authorization: Bearer <accessToken>`。
@@ -164,7 +164,7 @@
 
 ### 恢復訂閱
 
-`PATCH /subscriptions/:publicId/resume`
+`PATCH /api/subscriptions/:publicId/resume`
 
 - Authentication：需要 Bearer access token。
 - Request headers：`Authorization: Bearer <accessToken>`。
@@ -175,7 +175,7 @@
 
 ### 刪除訂閱
 
-`DELETE /subscriptions/:publicId`
+`DELETE /api/subscriptions/:publicId`
 
 - Authentication：需要 Bearer access token。
 - Request headers：`Authorization: Bearer <accessToken>`。
@@ -188,7 +188,7 @@
 
 ### 從通知 Email 取消訂閱
 
-`GET /subscriptions/unsubscribe`
+`GET /api/subscriptions/unsubscribe`
 
 - Authentication：不需要 JWT。使用通知 Email 中的取消訂閱 token。
 - Request headers：無。
