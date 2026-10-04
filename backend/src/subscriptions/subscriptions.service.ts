@@ -114,7 +114,45 @@ export class SubscriptionsService {
   }
 
   async resume(userPublicId: string, subscriptionPublicId: string) {
+    await this.recordFeedArticlesBeforeResume(userPublicId, subscriptionPublicId);
     return this.updateStatus(userPublicId, subscriptionPublicId, ACTIVE);
+  }
+
+  // 恢復前先把暫停期間尚未被排程抓到的文章記為較早的 firstSeenAt，避免恢復後被補寄。
+  private async recordFeedArticlesBeforeResume(
+    userPublicId: string,
+    subscriptionPublicId: string,
+  ): Promise<void> {
+    const userId = await this.getUserId(userPublicId);
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { publicId: subscriptionPublicId, userId, status: PAUSED },
+      select: { feed: { select: { id: true, url: true } } },
+    });
+    if (!subscription) {
+      return;
+    }
+
+    try {
+      const parsedFeed = await this.feedFetcher.fetchAndParse(subscription.feed.url);
+      if (parsedFeed.items.length === 0) {
+        return;
+      }
+      const seenAt = new Date();
+      await this.prisma.article.createMany({
+        data: parsedFeed.items.map((article) => ({
+          feedId: subscription.feed.id,
+          guid: article.guid,
+          title: article.title,
+          link: article.link,
+          description: article.description,
+          publishedAt: article.publishedAt,
+          firstSeenAt: seenAt,
+        })),
+        skipDuplicates: true,
+      });
+    } catch {
+      // Feed 暫時無法讀取時仍允許恢復，後續排程同步會處理。
+    }
   }
 
   async remove(userPublicId: string, subscriptionPublicId: string): Promise<void> {

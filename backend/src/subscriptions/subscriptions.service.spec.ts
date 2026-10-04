@@ -11,7 +11,8 @@ describe('訂閱服務', () => {
   let service: SubscriptionsService;
   let prisma: {
     user: { findUnique: jest.Mock };
-    subscription: { findMany: jest.Mock; count: jest.Mock };
+    subscription: { findMany: jest.Mock; count: jest.Mock; findFirst: jest.Mock };
+    article: { createMany: jest.Mock };
     $transaction: jest.Mock;
   };
   let transaction: {
@@ -74,7 +75,9 @@ describe('訂閱服務', () => {
       subscription: {
         findMany: jest.fn().mockResolvedValue([subscription]),
         count: jest.fn().mockResolvedValue(23),
+        findFirst: jest.fn().mockResolvedValue(null),
       },
+      article: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
       $transaction: jest.fn((callback: (tx: typeof transaction) => unknown) =>
         callback(transaction),
       ),
@@ -229,6 +232,23 @@ describe('訂閱服務', () => {
       data: { status: 'PAUSED', statusHistory: { create: { status: 'PAUSED' } } },
       include: { feed: true },
     });
+  });
+
+  it('恢復前先記錄暫停期間的文章，使其不會在恢復後補寄', async () => {
+    prisma.subscription.findFirst.mockResolvedValue({ feed: { id: 12n, url: feed.url } });
+    transaction.subscription.findFirst.mockResolvedValue({ id: 5n, status: 'PAUSED' });
+    transaction.subscription.update.mockResolvedValue(subscription);
+
+    await service.resume('user-a', 'subscription-public-id');
+
+    const seenAt = prisma.article.createMany.mock.calls[0][0].data[0].firstSeenAt as Date;
+    expect(prisma.article.createMany).toHaveBeenCalledWith(expect.objectContaining({
+      skipDuplicates: true,
+    }));
+    expect(seenAt.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(prisma.article.createMany.mock.invocationCallOrder[0]).toBeLessThan(
+      transaction.subscription.update.mock.invocationCallOrder[0],
+    );
   });
 
   it('無法暫停或刪除其他使用者或不存在的訂閱', async () => {
