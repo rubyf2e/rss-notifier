@@ -59,6 +59,16 @@ Frontend 預設網址為 `http://localhost:3001`，Backend API base URL 為 `htt
 
 - Mail queue：`mail`。Magic Link request enqueue 收件者與登入 URL；Worker 負責套用 Handlebars template 並呼叫 MailerService。
 - Feed sync：排程每分鐘檢查是否到期，到期後同步已訂閱 Feed；訂閱時保存文章基準，後續透過 `(feedId, guid)` 去重。單一 Feed 失敗會記錄錯誤並繼續處理其他 Feed。每分鐘的排程結果（包含 `SKIP`）與實際同步統計會寫入 Scheduler TXT。
+- 手動執行 Scheduler：在 Backend container 以獨立 Nest application context 執行同一個排程方法，完成後自動關閉 context，不會啟動 HTTP server。可用指令如下：
+
+  ```sh
+  docker compose exec backend npm run scheduler:feed-sync
+  docker compose exec backend npm run scheduler:article-cleanup
+  docker compose exec backend npm run scheduler:magic-link-cleanup
+  ```
+
+  目前通知 enqueue 屬於 Feed sync 的工作，沒有獨立的 Notification dispatch `@Cron` scheduler。
+
 - Article notification：以 `NotificationLog` 作為持久待辦紀錄，使用同一個 `mail` queue 寄送；BullMQ 指數退避最多 5 次，最終失敗寫入 `FAILED` 與錯誤原因。
 - Article cleanup：每日午夜依 `ARTICLE_RETENTION_PER_FEED` 清理每個 Feed 的舊文章，預設保留最新 5 篇；有通知紀錄或仍與啟用中訂閱相關的文章不會被刪除。
 - Redis：提供 BullMQ queue backend，不作為主要業務資料庫。

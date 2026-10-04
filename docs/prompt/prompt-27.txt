@@ -1,0 +1,83 @@
+檢查目前 `backend/src` 所有 Scheduler，將每個 production Scheduler 都提供一個可從 Docker command line 手動執行一次的方式。
+
+目前已知至少包含：
+- `FeedSyncScheduler`
+- `NotificationDispatchScheduler`
+- `MagicLinkCleanupScheduler`
+- `ArticleCleanupScheduler`
+
+要求：
+
+1. 先搜尋完整 `backend/src`，不要只處理上述 4 個；任何實際使用 NestJS Scheduler / `@Cron` 的 production scheduler 都納入。
+
+2. 每個 Scheduler 都必須可以單獨手動執行一次，例如：
+   `docker compose exec backend npm run scheduler:feed-sync`
+   `docker compose exec backend npm run scheduler:notification-dispatch`
+   `docker compose exec backend npm run scheduler:magic-link-cleanup`
+   `docker compose exec backend npm run scheduler:article-cleanup`
+
+3. 不新增 CLI framework 或 dependency。
+   優先使用 Node.js 現有能力與 NestJS 現有 application bootstrap。
+
+4. CLI 執行時：
+   - 啟動必要的 NestJS application context。
+   - 使用既有 Scheduler / Service instance。
+   - 執行與 Cron 相同的實際方法。
+   - 等待 async operation 完成。
+   - 成功 exit code `0`。
+   - 發生錯誤 exit code `1`。
+   - 執行完成後正確關閉 application context。
+   - 不啟動 HTTP server。
+
+5. 不要複製 Scheduler 的業務邏輯。
+   Cron 與 command 必須共用同一個既有 method，避免兩套實作。
+
+6. 保持既有：
+   - scheduler logging
+   - executionId
+   - error classification
+   - Redis / Prisma / Mail / Queue 等既有 infrastructure
+   - ConfigService 行為
+
+7. 如果目前 Scheduler method 是 private，調整成最小必要的可重用結構，不要做無關重構。
+
+8. `package.json` 新增每個 scheduler 對應的 script，命名保持一致：
+   - `scheduler:feed-sync`
+   - `scheduler:notification-dispatch`
+   - `scheduler:magic-link-cleanup`
+   - `scheduler:article-cleanup`
+   
+   如果還有其他 production Scheduler，也新增對應 script。
+
+9. CLI entrypoint 放在既有 backend 結構中，依目前專案慣例選擇最少檔案的實作方式。
+   不新增第二套 application bootstrap。
+
+10. 補必要測試：
+    - command 能呼叫正確 Scheduler。
+    - Scheduler 執行完成後正常結束。
+    - Scheduler 發生錯誤時回傳非 0 exit code。
+    - 不啟動 HTTP server。
+
+11. 更新必要 README / 文件，列出所有可手動執行的 scheduler commands。
+
+12. 完成後實際逐一執行所有 command，例如：
+    `docker compose exec backend npm run scheduler:feed-sync`
+    `docker compose exec backend npm run scheduler:notification-dispatch`
+    `docker compose exec backend npm run scheduler:magic-link-cleanup`
+    `docker compose exec backend npm run scheduler:article-cleanup`
+
+    確認每個 command 都能正常啟動、執行並結束。
+
+13. 最後執行：
+    `docker compose exec backend npm run lint`
+    `docker compose exec backend npm test`
+    `docker compose exec backend npm run build`
+
+14. 改寫readme
+
+完成後簡潔回報：
+1. 所有找到的 Scheduler
+2. 每個 Scheduler 對應的 command
+3. 修改檔案
+4. 每個 command 的實際執行結果
+5. lint / test / build 結果
