@@ -97,10 +97,29 @@ export function useNotifierApi() {
     });
   }
 
+  function sanitizePositiveInt(
+    val: unknown,
+    defaultValue: number,
+    maxValue = Number.MAX_SAFE_INTEGER,
+  ): number {
+    const num = Number(val);
+    const fallback = Math.min(
+      Math.max(1, Math.trunc(defaultValue)),
+      maxValue,
+    );
+
+    return Number.isFinite(num)
+      ? Math.min(Math.max(1, Math.trunc(num)), maxValue)
+      : fallback;
+  }
+
   function listSubscriptions(params: { page?: number; limit?: number } = {}) {
+    const page = sanitizePositiveInt(params.page, 1);
+    const limit = sanitizePositiveInt(params.limit, 10, 100);
+
     return request<PaginatedSubscriptionsResponse>(
       "/subscriptions",
-      { query: { page: params.page ?? 1, limit: params.limit ?? 10 } },
+      { query: { page, limit: params.limit ?? 10 } },
       true,
     );
   }
