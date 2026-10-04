@@ -141,6 +141,49 @@ describe('FeedSyncService', () => {
     expect(transaction.article.createMany.mock.calls[0][0].skipDuplicates).toBe(true);
   });
 
+  it('依 publishedAt 由新到舊新增文章，無日期文章排在最後', async () => {
+    const feed = subscribedFeeds[1];
+    prisma.feed.findMany.mockResolvedValue([feed]);
+    feedFetcher.fetchAndParse.mockReset().mockResolvedValue({
+      url: feed.url,
+      title: 'Healthy Feed',
+      description: null,
+      siteUrl: null,
+      items: [
+        {
+          guid: 'older',
+          title: 'Older article',
+          link: 'https://healthy.example/older',
+          description: null,
+          publishedAt: new Date('2026-10-02T00:00:00.000Z'),
+        },
+        {
+          guid: 'newer',
+          title: 'Newer article',
+          link: 'https://healthy.example/newer',
+          description: null,
+          publishedAt: new Date('2026-10-03T00:00:00.000Z'),
+        },
+        {
+          guid: 'undated',
+          title: 'Undated article',
+          link: 'https://healthy.example/undated',
+          description: null,
+          publishedAt: null,
+        },
+      ],
+    });
+
+    await service.syncSubscribedFeeds();
+
+    const insertedArticles = transaction.article.createMany.mock.calls[0][0].data;
+    expect(insertedArticles.map((article: { guid: string }) => article.guid)).toEqual([
+      'newer',
+      'older',
+      'undated',
+    ]);
+  });
+
   it('成功同步原本錯誤的 Feed 時回傳復原事件', async () => {
     const failedFeed = { ...subscribedFeeds[1], status: 'ERROR' };
     prisma.feed.findMany.mockResolvedValue([failedFeed]);

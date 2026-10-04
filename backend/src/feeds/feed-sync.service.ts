@@ -61,12 +61,18 @@ export class FeedSyncService {
         const parsedFeed = await this.feedFetcher.fetchAndParse(feed.url);
         const syncedAt = new Date();
         const firstSeenAt = feed.initialSyncCompleted ? syncedAt : feed.createdAt;
+        const articles = [...parsedFeed.items].sort((left, right) => {
+          const timeA = left.publishedAt?.getTime() ?? 0;
+          const timeB = right.publishedAt?.getTime() ?? 0;
+
+          return timeB - timeA;
+        });
 
         const insertedCount = await this.prisma.$transaction(async (transaction) => {
           let count = 0;
-          if (parsedFeed.items.length > 0) {
+          if (articles.length > 0) {
             const result = await transaction.article.createMany({
-              data: parsedFeed.items.map((article) => ({
+              data: articles.map((article) => ({
                 feedId: feed.id,
                 guid: article.guid,
                 title: article.title,
